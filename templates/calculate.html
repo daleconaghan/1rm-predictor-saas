@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Calculate 1RM - 1RM Predictor{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-calculator fa-3x text-primary mb-3"></i>
+                        <h2>Calculate Your 1RM</h2>
+                        <p class="text-muted">Enter your lift details for accurate predictions</p>
+                    </div>
+                    
+                    <form method="POST" id="calculateForm">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="exercise" class="form-label">Exercise</label>
+                                <select class="form-select" id="exercise" name="exercise" required>
+                                    <option value="">Select Exercise</option>
+                                    <option value="bench_press">Bench Press</option>
+                                    <option value="squat">Squat</option>
+                                    <option value="deadlift">Deadlift</option>
+                                    <option value="overhead_press">Overhead Press</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="weight" class="form-label">Weight (lbs)</label>
+                                <input type="number" class="form-control" id="weight" name="weight" 
+                                       step="0.1" min="0" required>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="reps" class="form-label">Reps Completed</label>
+                                <input type="number" class="form-control" id="reps" name="reps" 
+                                       min="1" max="15" required>
+                                <div class="form-text">Between 1-15 reps for accurate calculations</div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="bodyweight" class="form-label">Body Weight (lbs) <span class="text-muted">Optional</span></label>
+                                <input type="number" class="form-control" id="bodyweight" name="bodyweight" 
+                                       step="0.1" min="0">
+                                <div class="form-text">For strength level assessment</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4 text-center">
+                            <button type="submit" class="btn btn-primary btn-lg px-5">
+                                <i class="fas fa-chart-line"></i> Calculate 1RM
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="row mt-4 g-3">
+                <div class="col-md-4">
+                    <div class="card text-center border-primary">
+                        <div class="card-body">
+                            <i class="fas fa-brain fa-2x text-primary mb-2"></i>
+                            <h6>5 Proven Formulas</h6>
+                            <small class="text-muted">Epley, Brzycki, Lander, Lombardi, Mayhew</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center border-success">
+                        <div class="card-body">
+                            <i class="fas fa-target fa-2x text-success mb-2"></i>
+                            <h6>Training Zones</h6>
+                            <small class="text-muted">Strength, Power, Hypertrophy, Endurance</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center border-warning">
+                        <div class="card-body">
+                            <i class="fas fa-trophy fa-2x text-warning mb-2"></i>
+                            <h6>Strength Level</h6>
+                            <small class="text-muted">Beginner to Elite classification</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="bg-light py-4">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-10 mx-auto">
+                <h5 class="text-center mb-4">How Our Calculations Work</h5>
+                <div class="row g-4 small">
+                    <div class="col-md-6">
+                        <div class="d-flex">
+                            <i class="fas fa-calculator text-primary me-3 mt-1"></i>
+                            <div>
+                                <strong>Multiple Formulas</strong><br>
+                                We use 5 scientifically validated formulas and average the results for maximum accuracy.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex">
+                            <i class="fas fa-chart-bar text-success me-3 mt-1"></i>
+                            <div>
+                                <strong>Strength Standards</strong><br>
+                                Your results are compared against established strength standards for your body weight.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex">
+                            <i class="fas fa-bullseye text-warning me-3 mt-1"></i>
+                            <div>
+                                <strong>Training Recommendations</strong><br>
+                                Get specific weight ranges for different training goals and adaptations.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex">
+                            <i class="fas fa-trending-up text-info me-3 mt-1"></i>
+                            <div>
+                                <strong>Progress Tracking</strong><br>
+                                All calculations are saved to track your strength gains over time.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

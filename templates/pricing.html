@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Pricing - 1RM Predictor{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="text-center mb-5">
+        <h2>Choose Your Plan</h2>
+        <p class="lead text-muted">Unlock your strength potential with our proven 1RM calculator</p>
+    </div>
+    
+    <div class="row justify-content-center g-4">
+        <div class="col-md-4">
+            <div class="card h-100 shadow">
+                <div class="card-body text-center p-4">
+                    <h5 class="card-title">Free Trial</h5>
+                    <h2 class="text-primary mb-3">$0<small class="text-muted">/month</small></h2>
+                    
+                    <ul class="list-unstyled mb-4">
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> 10 calculations per month</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> 5 proven formulas</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Basic recommendations</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Strength level assessment</li>
+                        <li class="mb-2"><i class="fas fa-times text-muted me-2"></i> Limited history</li>
+                        <li class="mb-2"><i class="fas fa-times text-muted me-2"></i> No export features</li>
+                    </ul>
+                    
+                    {% if not current_user.is_authenticated %}
+                    <a href="{{ url_for('register') }}" class="btn btn-outline-primary w-100">
+                        Start Free Trial
+                    </a>
+                    {% else %}
+                    <button class="btn btn-outline-primary w-100" disabled>
+                        Current Plan
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card h-100 shadow border-primary position-relative">
+                <div class="position-absolute top-0 start-50 translate-middle">
+                    <span class="badge bg-primary px-3 py-2">Most Popular</span>
+                </div>
+                <div class="card-body text-center p-4">
+                    <h5 class="card-title text-primary">Pro</h5>
+                    <h2 class="text-primary mb-3">$9<small class="text-muted">/month</small></h2>
+                    
+                    <ul class="list-unstyled mb-4">
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Unlimited calculations</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> 5 proven formulas</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Advanced recommendations</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Strength level assessment</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Complete history tracking</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Progress analytics</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Export to CSV</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Email support</li>
+                    </ul>
+                    
+                    <button class="btn btn-primary w-100" onclick="alert('Payment integration coming soon!')">
+                        Upgrade to Pro
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card h-100 shadow">
+                <div class="card-body text-center p-4">
+                    <h5 class="card-title">Coach</h5>
+                    <h2 class="text-primary mb-3">$19<small class="text-muted">/month</small></h2>
+                    
+                    <ul class="list-unstyled mb-4">
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Everything in Pro</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Multi-athlete management</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Team analytics</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Custom exercise database</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> API access</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Priority support</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> White-label options</li>
+                    </ul>
+                    
+                    <button class="btn btn-outline-primary w-100" onclick="alert('Payment integration coming soon!')">
+                        Upgrade to Coach
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="text-center mt-5">
+        <h4>Why Choose Our 1RM Predictor?</h4>
+        <div class="row g-4 mt-3">
+            <div class="col-md-3">
+                <i class="fas fa-brain fa-2x text-primary mb-3"></i>
+                <h6>Scientifically Proven</h6>
+                <p class="small text-muted">Based on peer-reviewed research and validated formulas</p>
+            </div>
+            <div class="col-md-3">
+                <i class="fas fa-users fa-2x text-success mb-3"></i>
+                <h6>Trusted by Athletes</h6>
+                <p class="small text-muted">Used by powerlifters, coaches, and fitness enthusiasts</p>
+            </div>
+            <div class="col-md-3">
+                <i class="fas fa-chart-line fa-2x text-warning mb-3"></i>
+                <h6>Track Progress</h6>
+                <p class="small text-muted">Monitor your strength gains over time</p>
+            </div>
+            <div class="col-md-3">
+                <i class="fas fa-mobile-alt fa-2x text-info mb-3"></i>
+                <h6>Mobile Friendly</h6>
+                <p class="small text-muted">Calculate anywhere, anytime on any device</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-light rounded p-4 mt-5">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h5>Ready to maximize your strength potential?</h5>
+                <p class="mb-0 text-muted">Join thousands of athletes already using our platform to optimize their training.</p>
+            </div>
+            <div class="col-md-4 text-md-end">
+                {% if not current_user.is_authenticated %}
+                <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg">
+                    Start Free Trial
+                </a>
+                {% else %}
+                <a href="{{ url_for('calculate') }}" class="btn btn-primary btn-lg">
+                    Calculate Now
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

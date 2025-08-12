@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}History - 1RM Predictor{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-history text-primary"></i> Calculation History</h2>
+                <a href="{{ url_for('calculate') }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> New Calculation
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    {% if calculations %}
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Date</th>
+                            <th>Exercise</th>
+                            <th>Weight</th>
+                            <th>Reps</th>
+                            <th>Predicted 1RM</th>
+                            <th>Formula Used</th>
+                            <th>Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for calc in calculations %}
+                        <tr>
+                            <td>{{ calc.created_at.strftime('%m/%d/%Y %I:%M %p') }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ calc.exercise.replace('_', ' ').title() }}</span>
+                            </td>
+                            <td>{{ calc.weight }} lbs</td>
+                            <td>{{ calc.reps }}</td>
+                            <td>
+                                <strong class="text-success">{{ calc.calculated_1rm }} lbs</strong>
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ calc.formula_used.title() }}</small>
+                            </td>
+                            <td>
+                                {% set exercise_calcs = calculations|selectattr('exercise', 'equalto', calc.exercise)|list %}
+                                {% set calc_index = exercise_calcs.index(calc) %}
+                                {% if calc_index < exercise_calcs|length - 1 %}
+                                    {% set prev_calc = exercise_calcs[calc_index + 1] %}
+                                    {% set diff = calc.calculated_1rm - prev_calc.calculated_1rm %}
+                                    {% if diff > 0 %}
+                                        <span class="text-success">
+                                            <i class="fas fa-arrow-up"></i> +{{ diff|round(1) }} lbs
+                                        </span>
+                                    {% elif diff < 0 %}
+                                        <span class="text-danger">
+                                            <i class="fas fa-arrow-down"></i> {{ diff|round(1) }} lbs
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">
+                                            <i class="fas fa-minus"></i> No change
+                                        </span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">
+                                        <i class="fas fa-star"></i> First entry
+                                    </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Progress Summary</h5>
+                </div>
+                <div class="card-body">
+                    {% set exercises = calculations|map(attribute='exercise')|unique|list %}
+                    {% if exercises %}
+                    <div class="row g-3">
+                        {% for exercise in exercises %}
+                            {% set exercise_calcs = calculations|selectattr('exercise', 'equalto', exercise)|list %}
+                            {% set latest = exercise_calcs[0] %}
+                            {% set earliest = exercise_calcs[-1] %}
+                            {% set improvement = latest.calculated_1rm - earliest.calculated_1rm %}
+                            
+                            <div class="col-md-6 col-lg-4">
+                                <div class="card border-primary">
+                                    <div class="card-body text-center">
+                                        <h6 class="text-primary">{{ exercise.replace('_', ' ').title() }}</h6>
+                                        <h4>{{ latest.calculated_1rm }} lbs</h4>
+                                        <small class="text-muted">Current 1RM</small>
+                                        
+                                        {% if improvement > 0 %}
+                                        <div class="mt-2">
+                                            <span class="badge bg-success">
+                                                <i class="fas fa-arrow-up"></i> +{{ improvement|round(1) }} lbs total
+                                            </span>
+                                        </div>
+                                        {% elif improvement < 0 %}
+                                        <div class="mt-2">
+                                            <span class="badge bg-danger">
+                                                <i class="fas fa-arrow-down"></i> {{ improvement|round(1) }} lbs total
+                                            </span>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        <div class="mt-2">
+                                            <small class="text-muted">
+                                                {{ exercise_calcs|length }} calculation{{ 's' if exercise_calcs|length != 1 else '' }}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <div class="text-center py-5">
+        <i class="fas fa-history fa-4x text-muted mb-4"></i>
+        <h4>No calculation history</h4>
+        <p class="text-muted mb-4">Your calculation history will appear here once you start using the 1RM calculator.</p>
+        <a href="{{ url_for('calculate') }}" class="btn btn-primary btn-lg">
+            <i class="fas fa-calculator"></i> Calculate Your First 1RM
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

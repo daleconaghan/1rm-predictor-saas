@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero-section">
+    <div class="container text-center">
+        <h1 class="display-4 fw-bold mb-4">
+            <i class="fas fa-chart-line"></i> Predict Your 1RM
+        </h1>
+        <p class="lead mb-4">
+            Get accurate one-rep max predictions and personalized training recommendations
+        </p>
+        {% if not current_user.is_authenticated %}
+        <a href="{{ url_for('register') }}" class="btn btn-light btn-lg me-3">
+            <i class="fas fa-user-plus"></i> Start Free Trial
+        </a>
+        <a href="{{ url_for('calculate') }}" class="btn btn-outline-light btn-lg">
+            <i class="fas fa-calculator"></i> Try Calculator
+        </a>
+        {% else %}
+        <a href="{{ url_for('calculate') }}" class="btn btn-light btn-lg me-3">
+            <i class="fas fa-calculator"></i> Calculate 1RM
+        </a>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light btn-lg">
+            <i class="fas fa-chart-bar"></i> View Dashboard
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="container my-5">
+    <div class="row text-center mb-5">
+        <div class="col-12">
+            <h2 class="mb-4">Why Use Our 1RM Predictor?</h2>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card feature-card h-100 text-center p-4">
+                <div class="card-body">
+                    <i class="fas fa-calculator fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Multiple Formulas</h5>
+                    <p class="card-text">
+                        Uses 5 proven formulas (Epley, Brzycki, Lander, Lombardi, Mayhew) 
+                        for the most accurate predictions
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card feature-card h-100 text-center p-4">
+                <div class="card-body">
+                    <i class="fas fa-bullseye fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Smart Recommendations</h5>
+                    <p class="card-text">
+                        Get personalized training loads for strength, power, 
+                        hypertrophy, and endurance goals
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card feature-card h-100 text-center p-4">
+                <div class="card-body">
+                    <i class="fas fa-chart-line fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Progress Tracking</h5>
+                    <p class="card-text">
+                        Track your strength gains over time with detailed 
+                        history and performance analytics
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="bg-light py-5">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <h3 class="mb-4">Trusted by Serious Lifters</h3>
+                <ul class="list-unstyled">
+                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Powerlifters</li>
+                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Weightlifters</li>
+                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Strength Coaches</li>
+                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Personal Trainers</li>
+                </ul>
+                <p class="text-muted">
+                    Our algorithms are based on peer-reviewed research and tested 
+                    by thousands of athletes worldwide.
+                </p>
+            </div>
+            <div class="col-md-6">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="card stats-card text-center p-3">
+                            <h3 class="mb-1">50,000+</h3>
+                            <small>Calculations</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card stats-card text-center p-3">
+                            <h3 class="mb-1">95%</h3>
+                            <small>Accuracy</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card stats-card text-center p-3">
+                            <h3 class="mb-1">2,500+</h3>
+                            <small>Active Users</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card stats-card text-center p-3">
+                            <h3 class="mb-1">4.9/5</h3>
+                            <small>User Rating</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container my-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto text-center">
+            <h3 class="mb-4">How It Works</h3>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                            <span class="fw-bold">1</span>
+                        </div>
+                        <h6 class="mt-3">Enter Your Lift</h6>
+                        <p class="text-muted small">Weight lifted and reps completed</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                            <span class="fw-bold">2</span>
+                        </div>
+                        <h6 class="mt-3">Get Prediction</h6>
+                        <p class="text-muted small">AI calculates your 1RM using 5 formulas</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                            <span class="fw-bold">3</span>
+                        </div>
+                        <h6 class="mt-3">Train Smarter</h6>
+                        <p class="text-muted small">Follow personalized recommendations</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="bg-primary text-white py-5">
+    <div class="container text-center">
+        <h3 class="mb-4">Ready to Maximize Your Strength?</h3>
+        <p class="lead mb-4">Join thousands of athletes already using our platform</p>
+        {% if not current_user.is_authenticated %}
+        <a href="{{ url_for('register') }}" class="btn btn-light btn-lg">
+            <i class="fas fa-rocket"></i> Get Started Free
+        </a>
+        {% else %}
+        <a href="{{ url_for('calculate') }}" class="btn btn-light btn-lg">
+            <i class="fas fa-calculator"></i> Calculate Now
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

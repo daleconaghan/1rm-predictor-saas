@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - 1RM Predictor{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-chart-bar text-primary"></i> Dashboard</h2>
+                    <p class="text-muted">Welcome back, {{ current_user.username }}!</p>
+                </div>
+                <a href="{{ url_for('calculate') }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> New Calculation
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    {% if calculations %}
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-calculator fa-2x mb-2"></i>
+                    <h4>{{ calculations|length }}</h4>
+                    <small>Total Calculations</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-trophy fa-2x mb-2"></i>
+                    <h4>{{ calculations|map(attribute='calculated_1rm')|max|round(1) }}</h4>
+                    <small>Highest 1RM (lbs)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-dumbbell fa-2x mb-2"></i>
+                    <h4>{{ calculations|map(attribute='exercise')|unique|list|length }}</h4>
+                    <small>Exercises Tracked</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-calendar fa-2x mb-2"></i>
+                    <h4>{{ (calculations[0].created_at.strftime('%b %d') if calculations else 'N/A') }}</h4>
+                    <small>Last Calculation</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-history"></i> Recent Calculations</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Exercise</th>
+                            <th>Weight × Reps</th>
+                            <th>Predicted 1RM</th>
+                            <th>Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for calc in calculations %}
+                        <tr>
+                            <td>{{ calc.created_at.strftime('%m/%d/%Y') }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ calc.exercise.replace('_', ' ').title() }}</span>
+                            </td>
+                            <td>{{ calc.weight }} lbs × {{ calc.reps }}</td>
+                            <td>
+                                <strong class="text-success">{{ calc.calculated_1rm }} lbs</strong>
+                            </td>
+                            <td>
+                                {% set prev_calc = calculations|selectattr('exercise', 'equalto', calc.exercise)|list %}
+                                {% if prev_calc|length > 1 %}
+                                    {% set prev_1rm = prev_calc[1].calculated_1rm %}
+                                    {% set diff = calc.calculated_1rm - prev_1rm %}
+                                    {% if diff > 0 %}
+                                        <span class="text-success">
+                                            <i class="fas fa-arrow-up"></i> +{{ diff|round(1) }}
+                                        </span>
+                                    {% elif diff < 0 %}
+                                        <span class="text-danger">
+                                            <i class="fas fa-arrow-down"></i> {{ diff|round(1) }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">
+                                            <i class="fas fa-minus"></i> 0
+                                        </span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">First entry</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% if calculations|length > 5 %}
+            <div class="text-center mt-3">
+                <a href="{{ url_for('history') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-history"></i> View All History
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% else %}
+    <div class="text-center py-5">
+        <i class="fas fa-chart-line fa-4x text-muted mb-4"></i>
+        <h4>No calculations yet</h4>
+        <p class="text-muted mb-4">Start by calculating your first 1RM to see your progress here.</p>
+        <a href="{{ url_for('calculate') }}" class="btn btn-primary btn-lg">
+            <i class="fas fa-calculator"></i> Calculate Your First 1RM
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
