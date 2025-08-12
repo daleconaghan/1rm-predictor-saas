@@ -24,6 +24,16 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# Initialize database tables
+def init_db():
+    """Initialize database tables"""
+    with app.app_context():
+        db.create_all()
+        print("Database tables initialized")
+
+# Call initialization
+init_db()
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
