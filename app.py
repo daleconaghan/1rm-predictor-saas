@@ -12,14 +12,17 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Temporarily use SQLite for stable deployment
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///1rm_predictor.db'
-
-# TODO: Fix PostgreSQL connection later
-# database_url = os.environ.get('DATABASE_URL')
-# if database_url and database_url.startswith('postgresql://'):
-#     database_url = database_url.replace('postgresql://', 'postgresql+pg8000://', 1)
-#     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+# Handle PostgreSQL connection with SSL
+database_url = os.environ.get('DATABASE_URL')
+if database_url and database_url.startswith('postgresql://'):
+    # Convert to pg8000 format and add SSL
+    database_url = database_url.replace('postgresql://', 'postgresql+pg8000://', 1)
+    if '?' not in database_url:
+        database_url += '?sslmode=require'
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    # Fallback to SQLite
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///1rm_predictor.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
