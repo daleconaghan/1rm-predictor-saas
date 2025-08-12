@@ -54,7 +54,13 @@ class OneRMCalculation(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    try:
+        # Ensure tables exist before any database operations
+        db.create_all()
+        return User.query.get(int(user_id))
+    except Exception as e:
+        print(f"Error loading user: {e}")
+        return None
 
 class OneRMCalculator:
     @staticmethod
@@ -256,6 +262,8 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    # Ensure tables exist
+    db.create_all()
     recent_calculations = OneRMCalculation.query.filter_by(user_id=current_user.id)\
         .order_by(OneRMCalculation.created_at.desc()).limit(10).all()
     return render_template('dashboard.html', calculations=recent_calculations)
@@ -263,6 +271,9 @@ def dashboard():
 @app.route('/calculate', methods=['GET', 'POST'])
 @login_required
 def calculate():
+    # Ensure tables exist
+    db.create_all()
+    
     if request.method == 'POST':
         exercise = request.form['exercise']
         weight = float(request.form['weight'])
@@ -345,6 +356,8 @@ def api_calculate():
 @app.route('/history')
 @login_required
 def history():
+    # Ensure tables exist
+    db.create_all()
     calculations = OneRMCalculation.query.filter_by(user_id=current_user.id)\
         .order_by(OneRMCalculation.created_at.desc()).all()
     return render_template('history.html', calculations=calculations)
