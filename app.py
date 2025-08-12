@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 import math
@@ -18,6 +18,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///1rm_predictor.db'
 # Note: SQLite handles thousands of users perfectly for a 1RM calculator
 # Can migrate to PostgreSQL later when needed
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Configure session timeout for remember me functionality
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -245,10 +248,12 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        remember_me = request.form.get('remember_me') == 'on'
         user = User.query.filter_by(username=username).first()
         
         if user and check_password_hash(user.password_hash, password):
-            login_user(user)
+            login_user(user, remember=remember_me)
+            flash('Login successful!' + (' You will stay logged in for 30 days.' if remember_me else ''))
             return redirect(url_for('dashboard'))
         else:
             flash('Invalid username or password')
