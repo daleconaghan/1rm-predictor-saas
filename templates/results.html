@@ -9,7 +9,7 @@
             <div class="text-center mb-4">
                 <i class="fas fa-trophy fa-3x text-primary mb-3"></i>
                 <h2>Your 1RM Results</h2>
-                <p class="text-muted">{{ exercise.replace('_', ' ').title() }} - {{ weight }} lbs × {{ reps }} reps</p>
+                <p class="text-muted">{{ exercise.replace('_', ' ').title() }} - {{ weight }} {{ weight_unit }} × {{ reps }} reps</p>
             </div>
             
             <div class="row g-4 mb-5">
@@ -19,29 +19,29 @@
                             <h5 class="mb-0"><i class="fas fa-calculator"></i> Predicted 1RM</h5>
                         </div>
                         <div class="card-body text-center">
-                            <h1 class="display-4 text-primary mb-3">{{ average_1rm }} lbs</h1>
+                            <h1 class="display-4 text-primary mb-3">{{ average_1rm }} {{ weight_unit }}</h1>
                             <p class="text-muted">Average of 5 proven formulas</p>
                             
                             <div class="row g-2 mt-3">
                                 <div class="col-6">
                                     <small class="text-muted">Epley:</small><br>
-                                    <strong>{{ formulas.epley }} lbs</strong>
+                                    <strong>{{ formulas.epley }} {{ weight_unit }}</strong>
                                 </div>
                                 <div class="col-6">
                                     <small class="text-muted">Brzycki:</small><br>
-                                    <strong>{{ formulas.brzycki }} lbs</strong>
+                                    <strong>{{ formulas.brzycki }} {{ weight_unit }}</strong>
                                 </div>
                                 <div class="col-6">
                                     <small class="text-muted">Lander:</small><br>
-                                    <strong>{{ formulas.lander }} lbs</strong>
+                                    <strong>{{ formulas.lander }} {{ weight_unit }}</strong>
                                 </div>
                                 <div class="col-6">
                                     <small class="text-muted">Lombardi:</small><br>
-                                    <strong>{{ formulas.lombardi }} lbs</strong>
+                                    <strong>{{ formulas.lombardi }} {{ weight_unit }}</strong>
                                 </div>
                                 <div class="col-12">
                                     <small class="text-muted">Mayhew:</small><br>
-                                    <strong>{{ formulas.mayhew }} lbs</strong>
+                                    <strong>{{ formulas.mayhew }} {{ weight_unit }}</strong>
                                 </div>
                             </div>
                         </div>
@@ -98,7 +98,7 @@
                             <div class="card border-{{ color }}">
                                 <div class="card-body text-center">
                                     <h6 class="text-{{ color }}">{{ zone }}</h6>
-                                    <h4>{{ (average_1rm * min_pct / 100) | round(1) }} - {{ (average_1rm * max_pct / 100) | round(1) }} lbs</h4>
+                                    <h4>{{ (average_1rm * min_pct / 100) | round(1) }} - {{ (average_1rm * max_pct / 100) | round(1) }} {{ weight_unit }}</h4>
                                     <small class="text-muted">{{ min_pct }}% - {{ max_pct }}% of 1RM</small>
                                 </div>
                             </div>

@@ -160,10 +160,11 @@ class RecommendationEngine:
             return 'Beginner'
     
     @staticmethod
-    def generate_recommendations(one_rm, exercise, current_weight, current_reps, strength_level):
+    def generate_recommendations(one_rm, exercise, current_weight, current_reps, strength_level, weight_unit='lbs'):
         recommendations = []
         
-        recommendations.append(f"Your estimated 1RM for {exercise.replace('_', ' ').title()}: {one_rm} lbs")
+        unit_label = weight_unit
+        recommendations.append(f"Your estimated 1RM for {exercise.replace('_', ' ').title()}: {one_rm} {unit_label}")
         recommendations.append(f"Strength Level: {strength_level}")
         
         percentage_ranges = {
@@ -177,7 +178,7 @@ class RecommendationEngine:
         for goal, (min_pct, max_pct) in percentage_ranges.items():
             min_weight = round(one_rm * min_pct / 100, 1)
             max_weight = round(one_rm * max_pct / 100, 1)
-            recommendations.append(f"• {goal}: {min_weight}-{max_weight} lbs")
+            recommendations.append(f"• {goal}: {min_weight}-{max_weight} {unit_label}")
         
         if strength_level == 'Beginner':
             recommendations.append("\n💪 Beginner Tips:")
@@ -196,7 +197,7 @@ class RecommendationEngine:
             recommendations.append("• Consider coaching")
         
         next_goal = round(one_rm * 1.05, 1)
-        recommendations.append(f"\n🎯 Next Goal: {next_goal} lbs (+5%)")
+        recommendations.append(f"\n🎯 Next Goal: {next_goal} {unit_label} (+5%)")
         
         return recommendations
 
@@ -276,23 +277,49 @@ def calculate():
     
     if request.method == 'POST':
         exercise = request.form['exercise']
+        custom_exercise = request.form.get('custom_exercise', '').strip()
+        weight_unit = request.form['weight_unit']
         weight = float(request.form['weight'])
         reps = int(request.form['reps'])
         bodyweight = float(request.form.get('bodyweight', 0)) or None
+        
+        # Handle custom exercise
+        if exercise == 'custom' and custom_exercise:
+            exercise = custom_exercise.lower().replace(' ', '_')
+        
+        # Convert weight to lbs for calculations (formulas are calibrated for lbs)
+        if weight_unit == 'kg':
+            weight_lbs = weight * 2.20462  # Convert kg to lbs
+            if bodyweight:
+                bodyweight_lbs = bodyweight * 2.20462
+            else:
+                bodyweight_lbs = None
+        else:
+            weight_lbs = weight
+            bodyweight_lbs = bodyweight
         
         if reps < 1 or reps > 15:
             flash('Reps must be between 1 and 15 for accurate calculations')
             return redirect(url_for('calculate'))
         
-        formulas = OneRMCalculator.calculate_all_formulas(weight, reps)
-        average_1rm = OneRMCalculator.get_average_1rm(weight, reps)
+        # Calculate 1RM using converted weight
+        formulas = OneRMCalculator.calculate_all_formulas(weight_lbs, reps)
+        average_1rm_lbs = OneRMCalculator.get_average_1rm(weight_lbs, reps)
+        
+        # Convert results back to user's preferred unit
+        if weight_unit == 'kg':
+            formulas_display = {k: round(v / 2.20462, 1) for k, v in formulas.items()}
+            average_1rm_display = round(average_1rm_lbs / 2.20462, 1)
+        else:
+            formulas_display = formulas
+            average_1rm_display = average_1rm_lbs
         
         strength_level = RecommendationEngine.get_strength_level(
-            average_1rm, exercise, bodyweight
+            average_1rm_lbs, exercise, bodyweight_lbs
         )
         
         recommendations = RecommendationEngine.generate_recommendations(
-            average_1rm, exercise, weight, reps, strength_level
+            average_1rm_display, exercise, weight, reps, strength_level, weight_unit
         )
         
         calculation = OneRMCalculation(
@@ -300,18 +327,19 @@ def calculate():
             exercise=exercise,
             weight=weight,
             reps=reps,
-            calculated_1rm=average_1rm,
+            calculated_1rm=average_1rm_display,
             formula_used='average'
         )
         db.session.add(calculation)
         db.session.commit()
         
         return render_template('results.html', 
-                             formulas=formulas,
-                             average_1rm=average_1rm,
+                             formulas=formulas_display,
+                             average_1rm=average_1rm_display,
                              exercise=exercise,
                              weight=weight,
                              reps=reps,
+                             weight_unit=weight_unit,
                              strength_level=strength_level,
                              recommendations=recommendations)
     

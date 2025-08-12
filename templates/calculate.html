@@ -18,18 +18,41 @@
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label for="exercise" class="form-label">Exercise</label>
-                                <select class="form-select" id="exercise" name="exercise" required>
+                                <select class="form-select" id="exercise" name="exercise" required onchange="toggleCustomExercise()">
                                     <option value="">Select Exercise</option>
                                     <option value="bench_press">Bench Press</option>
                                     <option value="squat">Squat</option>
                                     <option value="deadlift">Deadlift</option>
                                     <option value="overhead_press">Overhead Press</option>
-                                    <option value="other">Other</option>
+                                    <option value="incline_bench">Incline Bench Press</option>
+                                    <option value="close_grip_bench">Close Grip Bench Press</option>
+                                    <option value="front_squat">Front Squat</option>
+                                    <option value="sumo_deadlift">Sumo Deadlift</option>
+                                    <option value="romanian_deadlift">Romanian Deadlift</option>
+                                    <option value="barbell_row">Barbell Row</option>
+                                    <option value="pull_up">Pull Up</option>
+                                    <option value="chin_up">Chin Up</option>
+                                    <option value="dip">Dip</option>
+                                    <option value="custom">Add Custom Exercise</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-6" id="customExerciseDiv" style="display: none;">
+                                <label for="custom_exercise" class="form-label">Custom Exercise Name</label>
+                                <input type="text" class="form-control" id="custom_exercise" name="custom_exercise" 
+                                       placeholder="Enter exercise name">
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="weight_unit" class="form-label">Weight Unit</label>
+                                <select class="form-select" id="weight_unit" name="weight_unit" required onchange="updateWeightLabels()">
+                                    <option value="lbs">Pounds (lbs)</option>
+                                    <option value="kg">Kilograms (kg)</option>
                                 </select>
                             </div>
                             
                             <div class="col-md-6">
-                                <label for="weight" class="form-label">Weight (lbs)</label>
+                                <label for="weight" class="form-label">Weight (<span id="weightUnitLabel">lbs</span>)</label>
                                 <input type="number" class="form-control" id="weight" name="weight" 
                                        step="0.1" min="0" required>
                             </div>
@@ -42,7 +65,7 @@
                             </div>
                             
                             <div class="col-md-6">
-                                <label for="bodyweight" class="form-label">Body Weight (lbs) <span class="text-muted">Optional</span></label>
+                                <label for="bodyweight" class="form-label">Body Weight (<span id="bodyweightUnitLabel">lbs</span>) <span class="text-muted">Optional</span></label>
                                 <input type="number" class="form-control" id="bodyweight" name="bodyweight" 
                                        step="0.1" min="0">
                                 <div class="form-text">For strength level assessment</div>
@@ -138,4 +161,41 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleCustomExercise() {
+    const exerciseSelect = document.getElementById('exercise');
+    const customDiv = document.getElementById('customExerciseDiv');
+    const customInput = document.getElementById('custom_exercise');
+    
+    if (exerciseSelect.value === 'custom') {
+        customDiv.style.display = 'block';
+        customInput.required = true;
+    } else {
+        customDiv.style.display = 'none';
+        customInput.required = false;
+        customInput.value = '';
+    }
+}
+
+function updateWeightLabels() {
+    const weightUnit = document.getElementById('weight_unit').value;
+    document.getElementById('weightUnitLabel').textContent = weightUnit;
+    document.getElementById('bodyweightUnitLabel').textContent = weightUnit;
+}
+
+// Form validation
+document.getElementById('calculateForm').addEventListener('submit', function(e) {
+    const exercise = document.getElementById('exercise').value;
+    const customExercise = document.getElementById('custom_exercise').value;
+    
+    if (exercise === 'custom' && !customExercise.trim()) {
+        e.preventDefault();
+        alert('Please enter a custom exercise name.');
+        return false;
+    }
+});
+</script>
 {% endblock %}
