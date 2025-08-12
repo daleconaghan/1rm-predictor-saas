@@ -200,6 +200,9 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    # Ensure tables exist before any database operations
+    db.create_all()
+    
     if request.method == 'POST':
         username = request.form['username']
         email = request.form['email']
@@ -229,6 +232,9 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Ensure tables exist
+    db.create_all()
+    
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
