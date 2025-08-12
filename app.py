@@ -12,13 +12,11 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Handle PostgreSQL connection with SSL
+# Handle PostgreSQL connection - pg8000 doesn't use sslmode
 database_url = os.environ.get('DATABASE_URL')
 if database_url and database_url.startswith('postgresql://'):
-    # Convert to pg8000 format and add SSL
+    # Convert to pg8000 format (SSL is enabled by default on Render)
     database_url = database_url.replace('postgresql://', 'postgresql+pg8000://', 1)
-    if '?' not in database_url:
-        database_url += '?sslmode=require'
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
     # Fallback to SQLite
