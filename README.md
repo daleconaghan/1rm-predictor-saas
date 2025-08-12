@@ -96,6 +96,19 @@ A professional Flask web application that predicts one-rep max (1RM) strength us
 4. **Lombardi (1989)**: `1RM = weight × reps^0.10`
 5. **Mayhew et al. (1992)**: `1RM = 100 × weight / (52.2 + 41.9 × e^(-0.055 × reps))`
 
+### Notes
+
+- Validated primarily for 1–10 reps; beyond that, error grows
+
+
+- We average formulas to reduce individual bias
+
+- Results are estimates and should be verified under supervision
+
+Disclaimer: This application provides informational estimates only and is not medical advice. Consult a qualified professional before attempting max loads.
+
+
+
 ### Accuracy & Validation
 - **95% accuracy** within 5% of actual 1RM for reps 1-10
 - **Peer-reviewed formulas** from exercise science research
