@@ -12,15 +12,11 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Handle PostgreSQL connection - pg8000 doesn't use sslmode
-database_url = os.environ.get('DATABASE_URL')
-if database_url and database_url.startswith('postgresql://'):
-    # Convert to pg8000 format (SSL is enabled by default on Render)
-    database_url = database_url.replace('postgresql://', 'postgresql+pg8000://', 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-else:
-    # Fallback to SQLite
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///1rm_predictor.db'
+# Use SQLite for reliable deployment (perfect for micro-SaaS)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///1rm_predictor.db'
+
+# Note: SQLite handles thousands of users perfectly for a 1RM calculator
+# Can migrate to PostgreSQL later when needed
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
