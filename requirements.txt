@@ -7,7 +7,6 @@ Werkzeug==3.0.1
 gunicorn==21.2.0
 python-dotenv==1.0.0
 bcrypt==4.1.2
-pg8000==1.30.3
 Flask-Mail==0.9.1
 itsdangerous==2.1.2
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.7
