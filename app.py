@@ -1,8 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
+from itsdangerous import URLSafeTimedSerializer
 import os
 from dotenv import load_dotenv
 import math
@@ -13,7 +15,8 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Use SQLite for reliable deployment (perfect for micro-SaaS)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///1rm_predictor.db'
+database_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', '1rm_predictor.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{database_path}'
 
 # Note: SQLite handles thousands of users perfectly for a 1RM calculator
 # Can migrate to PostgreSQL later when needed
@@ -22,10 +25,28 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Configure session timeout for remember me functionality
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
+# Session configuration for proper login persistence
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+
+# Email configuration
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
+
 db = SQLAlchemy(app)
+mail = Mail(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# Initialize URL serializer for email tokens
+serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 # Initialize database tables
 def init_db():
@@ -42,6 +63,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
+    email_verified = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     calculations = db.relationship('OneRMCalculation', backref='user', lazy=True)
 
@@ -64,6 +86,62 @@ def load_user(user_id):
     except Exception as e:
         print(f"Error loading user: {e}")
         return None
+
+def send_verification_email(user):
+    """Send email verification email"""
+    if not app.config.get('MAIL_USERNAME'):
+        print("Email not configured - verification email not sent")
+        return
+    
+    token = serializer.dumps(user.email, salt='email-verification')
+    verification_url = url_for('verify_email', token=token, _external=True)
+    
+    msg = Message(
+        subject='Verify Your Email - 1RM Predictor',
+        recipients=[user.email],
+        html=f'''
+        <h2>Welcome to 1RM Predictor!</h2>
+        <p>Hi {user.username},</p>
+        <p>Please click the link below to verify your email address:</p>
+        <p><a href="{verification_url}">Verify Email Address</a></p>
+        <p>This link will expire in 24 hours.</p>
+        <p>If you didn't create this account, please ignore this email.</p>
+        '''
+    )
+    
+    try:
+        mail.send(msg)
+        print(f"Verification email sent to {user.email}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+def send_password_reset_email(user):
+    """Send password reset email"""
+    if not app.config.get('MAIL_USERNAME'):
+        print("Email not configured - reset email not sent")
+        return
+    
+    token = serializer.dumps(user.email, salt='password-reset')
+    reset_url = url_for('reset_password', token=token, _external=True)
+    
+    msg = Message(
+        subject='Password Reset - 1RM Predictor',
+        recipients=[user.email],
+        html=f'''
+        <h2>Password Reset Request</h2>
+        <p>Hi {user.username},</p>
+        <p>Click the link below to reset your password:</p>
+        <p><a href="{reset_url}">Reset Password</a></p>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't request this, please ignore this email.</p>
+        '''
+    )
+    
+    try:
+        mail.send(msg)
+        print(f"Password reset email sent to {user.email}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
 
 class OneRMCalculator:
     @staticmethod
@@ -229,14 +307,15 @@ def register():
         user = User(
             username=username,
             email=email,
-            password_hash=generate_password_hash(password)
+            password_hash=generate_password_hash(password),
+            email_verified=False
         )
         db.session.add(user)
         db.session.commit()
         
-        login_user(user)
-        flash('Registration successful!')
-        return redirect(url_for('dashboard'))
+        send_verification_email(user)
+        flash('Registration successful! Please check your email to verify your account.')
+        return redirect(url_for('login'))
     
     return render_template('register.html')
 
@@ -251,6 +330,7 @@ def login():
         remember_me = request.form.get('remember_me') == 'on'
         user = User.query.filter_by(username=username).first()
         
+        
         if user and check_password_hash(user.password_hash, password):
             login_user(user, remember=remember_me)
             flash('Login successful!' + (' You will stay logged in for 30 days.' if remember_me else ''))
@@ -259,6 +339,68 @@ def login():
             flash('Invalid username or password')
     
     return render_template('login.html')
+
+@app.route('/verify-email/<token>')
+def verify_email(token):
+    try:
+        email = serializer.loads(token, salt='email-verification', max_age=86400)  # 24 hours
+        user = User.query.filter_by(email=email).first()
+        
+        if user:
+            user.email_verified = True
+            db.session.commit()
+            flash('Email verified successfully! You can now login.')
+        else:
+            flash('Invalid verification link.')
+    except Exception:
+        flash('Invalid or expired verification link.')
+    
+    return redirect(url_for('login'))
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form['email']
+        user = User.query.filter_by(email=email).first()
+        
+        if user:
+            send_password_reset_email(user)
+            flash('Password reset instructions sent to your email.')
+        else:
+            flash('Email address not found.')
+        
+        return redirect(url_for('login'))
+    
+    return render_template('forgot_password.html')
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    try:
+        email = serializer.loads(token, salt='password-reset', max_age=3600)  # 1 hour
+    except Exception:
+        flash('Invalid or expired reset link.')
+        return redirect(url_for('forgot_password'))
+    
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        flash('Invalid reset link.')
+        return redirect(url_for('forgot_password'))
+    
+    if request.method == 'POST':
+        new_password = request.form['password']
+        confirm_password = request.form['confirm_password']
+        
+        if new_password != confirm_password:
+            flash('Passwords do not match.')
+            return render_template('reset_password.html', token=token)
+        
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        
+        flash('Password reset successful! You can now login.')
+        return redirect(url_for('login'))
+    
+    return render_template('reset_password.html', token=token)
 
 @app.route('/logout')
 def logout():
@@ -407,4 +549,4 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Database error: {e}")
             print(f"DATABASE_URL: {os.environ.get('DATABASE_URL', 'Not set')}")
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)
