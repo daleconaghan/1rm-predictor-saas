@@ -557,6 +557,14 @@ def history():
 def pricing():
     return render_template('pricing.html')
 
+@app.route('/migrate-db')
+def migrate_db():
+    try:
+        db.engine.execute('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(255);')
+        return "Database migration successful!"
+    except Exception as e:
+        return f"Migration failed: {e}"
+
 if __name__ == '__main__':
     with app.app_context():
         try:
