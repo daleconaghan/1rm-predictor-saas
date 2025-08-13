@@ -296,6 +296,10 @@ class RecommendationEngine:
 
 @app.route('/')
 def index():
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"Database error on index: {e}")
     return render_template('index.html')
 
 @app.route('/register', methods=['GET', 'POST'])
