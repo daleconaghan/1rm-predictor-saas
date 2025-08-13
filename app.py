@@ -560,7 +560,9 @@ def pricing():
 @app.route('/migrate-db')
 def migrate_db():
     try:
-        db.engine.execute('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(255);')
+        with db.engine.connect() as connection:
+            connection.execute(db.text('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(255);'))
+            connection.commit()
         return "Database migration successful!"
     except Exception as e:
         return f"Migration failed: {e}"
