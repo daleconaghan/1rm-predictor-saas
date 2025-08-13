@@ -16,7 +16,11 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-i
 
 # Use SQLite for reliable deployment (perfect for micro-SaaS)
 if os.environ.get('DATABASE_URL'):
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    # Convert postgresql:// to postgresql+psycopg:// for psycopg3
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url.startswith('postgresql://'):
+        database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
     # Local development
     database_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', '1rm_predictor.db')
