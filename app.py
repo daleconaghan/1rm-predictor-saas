@@ -15,8 +15,12 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Use SQLite for reliable deployment (perfect for micro-SaaS)
-database_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', '1rm_predictor.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{database_path}'
+if os.environ.get('DATABASE_URL'):
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+else:
+    # Local development
+    database_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', '1rm_predictor.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{database_path}'
 
 # Note: SQLite handles thousands of users perfectly for a 1RM calculator
 # Can migrate to PostgreSQL later when needed
