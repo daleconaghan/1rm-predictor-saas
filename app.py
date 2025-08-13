@@ -59,12 +59,16 @@ serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 # Initialize database tables
 def init_db():
     """Initialize database tables"""
-    with app.app_context():
-        db.create_all()
-        print("Database tables initialized")
+    try:
+        with app.app_context():
+            db.create_all()
+            print("Database tables initialized")
+    except Exception as e:
+        print(f"Database initialization failed: {e}")
 
-# Call initialization
-init_db()
+# Call initialization only if not in production startup
+if __name__ == '__main__':
+    init_db()
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
