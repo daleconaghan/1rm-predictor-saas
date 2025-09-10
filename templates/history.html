@@ -38,10 +38,10 @@
                             <td>
                                 <span class="badge bg-secondary">{{ calc.exercise.replace('_', ' ').title() }}</span>
                             </td>
-                            <td>{{ calc.weight }} lbs</td>
+                            <td>{{ calc.weight }} {{ calc.weight_unit|default('lbs') }}</td>
                             <td>{{ calc.reps }}</td>
                             <td>
-                                <strong class="text-success">{{ calc.calculated_1rm }} lbs</strong>
+                                <strong class="text-success">{{ calc.calculated_1rm }} {{ calc.weight_unit|default('lbs') }}</strong>
                             </td>
                             <td>
                                 <small class="text-muted">{{ calc.formula_used.title() }}</small>
@@ -54,11 +54,11 @@
                                     {% set diff = calc.calculated_1rm - prev_calc.calculated_1rm %}
                                     {% if diff > 0 %}
                                         <span class="text-success">
-                                            <i class="fas fa-arrow-up"></i> +{{ diff|round(1) }} lbs
+                                            <i class="fas fa-arrow-up"></i> +{{ diff|round(1) }} {{ calc.weight_unit|default('lbs') }}
                                         </span>
                                     {% elif diff < 0 %}
                                         <span class="text-danger">
-                                            <i class="fas fa-arrow-down"></i> {{ diff|round(1) }} lbs
+                                            <i class="fas fa-arrow-down"></i> {{ diff|round(1) }} {{ calc.weight_unit|default('lbs') }}
                                         </span>
                                     {% else %}
                                         <span class="text-muted">
@@ -99,19 +99,19 @@
                                 <div class="card border-primary">
                                     <div class="card-body text-center">
                                         <h6 class="text-primary">{{ exercise.replace('_', ' ').title() }}</h6>
-                                        <h4>{{ latest.calculated_1rm }} lbs</h4>
+                                        <h4>{{ latest.calculated_1rm }} {{ latest.weight_unit|default('lbs') }}</h4>
                                         <small class="text-muted">Current 1RM</small>
                                         
                                         {% if improvement > 0 %}
                                         <div class="mt-2">
                                             <span class="badge bg-success">
-                                                <i class="fas fa-arrow-up"></i> +{{ improvement|round(1) }} lbs total
+                                                <i class="fas fa-arrow-up"></i> +{{ improvement|round(1) }} {{ latest.weight_unit|default('lbs') }} total
                                             </span>
                                         </div>
                                         {% elif improvement < 0 %}
                                         <div class="mt-2">
                                             <span class="badge bg-danger">
-                                                <i class="fas fa-arrow-down"></i> {{ improvement|round(1) }} lbs total
+                                                <i class="fas fa-arrow-down"></i> {{ improvement|round(1) }} {{ latest.weight_unit|default('lbs') }} total
                                             </span>
                                         </div>
                                         {% endif %}

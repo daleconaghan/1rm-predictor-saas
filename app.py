@@ -122,6 +122,7 @@ class OneRMCalculation(db.Model):
     reps = db.Column(db.Integer, nullable=False)
     calculated_1rm = db.Column(db.Float, nullable=False)
     formula_used = db.Column(db.String(50), nullable=False)
+    weight_unit = db.Column(db.String(10), default='lbs')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
@@ -532,7 +533,8 @@ def calculate():
             weight=weight,
             reps=reps,
             calculated_1rm=average_1rm_display,
-            formula_used='average'
+            formula_used='average',
+            weight_unit=weight_unit
         )
         db.session.add(calculation)
         
@@ -662,10 +664,16 @@ def safe_migrate():
                 connection.execute(db.text('ALTER TABLE "user" ADD COLUMN stripe_customer_id VARCHAR(100);'))
             except:
                 pass
+            
+            # Add weight_unit field to calculations table
+            try:
+                connection.execute(db.text('ALTER TABLE "one_rmcalculation" ADD COLUMN weight_unit VARCHAR(10) DEFAULT \'lbs\';'))
+            except:
+                pass
                 
             connection.commit()
             
-        return "✅ Safe migration complete! New subscription fields added."
+        return "✅ Safe migration complete! New subscription and weight unit fields added."
     except Exception as e:
         return f"❌ Safe migration failed: {e}"
 

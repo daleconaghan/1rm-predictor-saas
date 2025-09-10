@@ -33,8 +33,12 @@
             <div class="card bg-success text-white">
                 <div class="card-body text-center">
                     <i class="fas fa-trophy fa-2x mb-2"></i>
-                    <h4>{{ calculations|map(attribute='calculated_1rm')|max|round(1) }}</h4>
-                    <small>Highest 1RM (lbs)</small>
+                    <h4>{{ calculations|map(attribute='calculated_1rm')|max|round(1) }} 
+                        {%- if calculations -%}
+                        {{ calculations|selectattr('calculated_1rm', 'equalto', calculations|map(attribute='calculated_1rm')|max)|first|attr('weight_unit')|default('lbs') }}
+                        {%- endif -%}
+                    </h4>
+                    <small>Highest 1RM</small>
                 </div>
             </div>
         </div>
@@ -94,9 +98,9 @@
                             <td>
                                 <span class="badge bg-secondary">{{ calc.exercise.replace('_', ' ').title() }}</span>
                             </td>
-                            <td>{{ calc.weight }} lbs × {{ calc.reps }}</td>
+                            <td>{{ calc.weight }} {{ calc.weight_unit|default('lbs') }} × {{ calc.reps }}</td>
                             <td>
-                                <strong class="text-success">{{ calc.calculated_1rm }} lbs</strong>
+                                <strong class="text-success">{{ calc.calculated_1rm }} {{ calc.weight_unit|default('lbs') }}</strong>
                             </td>
                             <td>
                                 {% set prev_calc = calculations|selectattr('exercise', 'equalto', calc.exercise)|list %}
