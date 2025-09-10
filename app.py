@@ -484,7 +484,8 @@ def calculate():
         weight_unit = request.form['weight_unit']
         weight = float(request.form['weight'])
         reps = int(request.form['reps'])
-        bodyweight = float(request.form.get('bodyweight', 0)) or None
+        bodyweight_str = request.form.get('bodyweight', '').strip()
+        bodyweight = float(bodyweight_str) if bodyweight_str else None
         
         # Handle custom exercise
         if exercise == 'custom' and custom_exercise:
