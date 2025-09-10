@@ -112,7 +112,7 @@ class User(UserMixin, db.Model):
     def increment_calculations(self):
         """Increment calculation count"""
         self.calculations_used_this_month += 1
-        db.session.commit()
+        # Don't commit here - let the caller handle the transaction
 
 class OneRMCalculation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -668,6 +668,20 @@ def safe_migrate():
         return "✅ Safe migration complete! New subscription fields added."
     except Exception as e:
         return f"❌ Safe migration failed: {e}"
+
+@app.route('/reset-usage/<username>')
+def reset_usage(username):
+    """Reset calculation count for testing - REMOVE IN PRODUCTION"""
+    try:
+        user = User.query.filter_by(username=username).first()
+        if user:
+            user.calculations_used_this_month = 0
+            db.session.commit()
+            return f"✅ Reset usage for {username} to 0/10"
+        else:
+            return f"❌ User {username} not found"
+    except Exception as e:
+        return f"❌ Reset failed: {e}"
 
 if __name__ == '__main__':
     with app.app_context():
