@@ -77,7 +77,42 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255))
     email_verified = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Subscription fields
+    subscription_tier = db.Column(db.String(20), default='free')  # free, pro, coach
+    subscription_status = db.Column(db.String(20), default='active')  # active, cancelled, expired
+    subscription_expires = db.Column(db.DateTime)
+    calculations_used_this_month = db.Column(db.Integer, default=0)
+    last_reset_date = db.Column(db.DateTime, default=datetime.utcnow)
+    stripe_customer_id = db.Column(db.String(100))
+    
     calculations = db.relationship('OneRMCalculation', backref='user', lazy=True)
+    
+    def get_calculation_limit(self):
+        """Get monthly calculation limit based on subscription tier"""
+        if self.subscription_tier == 'free':
+            return 10
+        elif self.subscription_tier == 'pro':
+            return 999999  # unlimited (high number)
+        elif self.subscription_tier == 'coach':
+            return 999999  # unlimited
+        return 10  # default to free
+    
+    def can_calculate(self):
+        """Check if user can make another calculation"""
+        # Reset monthly counter if needed
+        now = datetime.utcnow()
+        if self.last_reset_date and (now - self.last_reset_date).days >= 30:
+            self.calculations_used_this_month = 0
+            self.last_reset_date = now
+            db.session.commit()
+        
+        return self.calculations_used_this_month < self.get_calculation_limit()
+    
+    def increment_calculations(self):
+        """Increment calculation count"""
+        self.calculations_used_this_month += 1
+        db.session.commit()
 
 class OneRMCalculation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -438,6 +473,11 @@ def calculate():
     # Ensure tables exist
     db.create_all()
     
+    # Check calculation limit before processing
+    if not current_user.can_calculate():
+        flash(f'You have reached your monthly limit of {current_user.get_calculation_limit()} calculations. Upgrade to Pro for unlimited calculations!', 'warning')
+        return redirect(url_for('pricing'))
+    
     if request.method == 'POST':
         exercise = request.form['exercise']
         custom_exercise = request.form.get('custom_exercise', '').strip()
@@ -494,6 +534,10 @@ def calculate():
             formula_used='average'
         )
         db.session.add(calculation)
+        
+        # Increment calculation counter
+        current_user.increment_calculations()
+        
         db.session.commit()
         
         return render_template('results.html', 

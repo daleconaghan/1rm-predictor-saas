@@ -48,6 +48,19 @@
             </div>
         </div>
         <div class="col-md-3">
+            <div class="card {% if current_user.subscription_tier == 'free' %}bg-info{% else %}bg-success{% endif %} text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-chart-pie fa-2x mb-2"></i>
+                    {% if current_user.subscription_tier == 'free' %}
+                        <h4>{{ current_user.calculations_used_this_month }}/{{ current_user.get_calculation_limit() }}</h4>
+                        <small>Monthly Usage</small>
+                    {% else %}
+                        <h4>{{ current_user.subscription_tier.title() }}</h4>
+                        <small>Unlimited</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
             <div class="card bg-info text-white">
                 <div class="card-body text-center">
                     <i class="fas fa-calendar fa-2x mb-2"></i>
