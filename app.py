@@ -677,7 +677,27 @@ def safe_migrate():
     except Exception as e:
         return f"❌ Safe migration failed: {e}"
 
-# Debug routes removed for production
+@app.route('/check-schema')
+def check_schema():
+    """Check database schema"""
+    try:
+        with db.engine.connect() as connection:
+            result = connection.execute(db.text("SELECT column_name FROM information_schema.columns WHERE table_name = 'one_rm_calculation';"))
+            columns = [row[0] for row in result]
+            return f"Columns in one_rm_calculation: {columns}"
+    except Exception as e:
+        return f"Error: {e}"
+
+@app.route('/force-add-weight-unit')
+def force_add_weight_unit():
+    """Force add weight_unit column"""
+    try:
+        with db.engine.connect() as connection:
+            connection.execute(db.text('ALTER TABLE one_rm_calculation ADD COLUMN weight_unit VARCHAR(10) DEFAULT \'lbs\';'))
+            connection.commit()
+            return "✅ weight_unit column added successfully"
+    except Exception as e:
+        return f"❌ Error: {e}"
 
 if __name__ == '__main__':
     with app.app_context():
