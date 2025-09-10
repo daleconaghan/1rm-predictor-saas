@@ -667,7 +667,7 @@ def safe_migrate():
             
             # Add weight_unit field to calculations table
             try:
-                connection.execute(db.text('ALTER TABLE "one_rmcalculation" ADD COLUMN weight_unit VARCHAR(10) DEFAULT \'lbs\';'))
+                connection.execute(db.text('ALTER TABLE "one_rm_calculation" ADD COLUMN weight_unit VARCHAR(10) DEFAULT \'lbs\';'))
             except:
                 pass
                 
