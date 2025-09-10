@@ -139,6 +139,39 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Timezone Detection Script -->
+    <script>
+        // Detect user's timezone on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const storedTimezone = sessionStorage.getItem('userTimezone');
+            
+            // Only send timezone to server if it's different from stored one
+            if (storedTimezone !== userTimezone) {
+                sessionStorage.setItem('userTimezone', userTimezone);
+                
+                // Send timezone to server
+                fetch('/set-timezone', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ timezone: userTimezone })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.reload) {
+                        // Reload page to show times in correct timezone
+                        window.location.reload();
+                    }
+                })
+                .catch(error => console.log('Timezone detection failed:', error));
+            }
+        });
+    </script>
+    
     {% block scripts %}{% endblock %}
 </body>
 </html>

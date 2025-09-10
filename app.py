@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, timezone
+import pytz
 from itsdangerous import URLSafeTimedSerializer
 import os
 from dotenv import load_dotenv
@@ -63,9 +64,17 @@ def localtime_filter(utc_dt, fmt='%m/%d/%Y %I:%M %p'):
     if utc_dt.tzinfo is None:
         utc_dt = utc_dt.replace(tzinfo=timezone.utc)
     
-    # Convert to user's timezone (UTC+1)
-    user_tz = timezone(timedelta(hours=1))  # CET/BST (UTC+1)
-    local_dt = utc_dt.astimezone(user_tz)
+    # Get user's timezone from session, default to UTC+1
+    user_timezone_name = session.get('user_timezone', 'Europe/London')
+    
+    try:
+        # Try to use pytz for better timezone handling
+        user_tz = pytz.timezone(user_timezone_name)
+        local_dt = utc_dt.astimezone(user_tz)
+    except:
+        # Fallback to manual UTC+1 offset
+        user_tz = timezone(timedelta(hours=1))
+        local_dt = utc_dt.astimezone(user_tz)
     
     # Return formatted string
     return local_dt.strftime(fmt)
@@ -620,6 +629,32 @@ def history():
 @app.route('/pricing')
 def pricing():
     return render_template('pricing.html')
+
+@app.route('/set-timezone', methods=['POST'])
+def set_timezone():
+    """Store user's timezone in session"""
+    try:
+        data = request.get_json()
+        timezone_name = data.get('timezone')
+        
+        if timezone_name:
+            # Validate timezone name
+            try:
+                pytz.timezone(timezone_name)
+                session['user_timezone'] = timezone_name
+                session.permanent = True
+                
+                return jsonify({
+                    'success': True,
+                    'timezone': timezone_name,
+                    'reload': True  # Tell frontend to reload for updated times
+                })
+            except:
+                return jsonify({'success': False, 'error': 'Invalid timezone'})
+        
+        return jsonify({'success': False, 'error': 'No timezone provided'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/migrate-db')
 def migrate_db():
