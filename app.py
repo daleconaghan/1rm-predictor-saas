@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from itsdangerous import URLSafeTimedSerializer
 import os
 from dotenv import load_dotenv
@@ -52,6 +52,23 @@ mail = Mail(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+@app.template_filter('localtime')
+def localtime_filter(utc_dt):
+    """Convert UTC datetime to user's local time for display"""
+    if utc_dt is None:
+        return ''
+    
+    # Add UTC timezone info to the datetime if it doesn't have one
+    if utc_dt.tzinfo is None:
+        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+    
+    # Try to get user's timezone from session/request, default to common EU timezone
+    # Since you're 1 hour ahead of UTC, you're likely in CET/BST
+    user_tz = timezone(timedelta(hours=1))  # CET/BST (UTC+1)
+    local_dt = utc_dt.astimezone(user_tz)
+    
+    return local_dt
 
 # Initialize URL serializer for email tokens
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
