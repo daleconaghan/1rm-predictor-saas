@@ -611,6 +611,63 @@ def migrate_db():
     except Exception as e:
         return f"Migration failed: {e}"
 
+@app.route('/force-migrate')
+def force_migrate():
+    """Force recreate all database tables - WARNING: Deletes all data"""
+    try:
+        with app.app_context():
+            # Drop all tables (deletes all data)
+            db.drop_all()
+            
+            # Recreate all tables with new schema
+            db.create_all()
+            
+            return "✅ Database force migration complete! All tables recreated with subscription fields."
+    except Exception as e:
+        return f"❌ Force migration failed: {e}"
+
+@app.route('/safe-migrate')  
+def safe_migrate():
+    """Add new subscription columns without deleting existing data"""
+    try:
+        with db.engine.connect() as connection:
+            # Add subscription fields one by one
+            try:
+                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN subscription_tier VARCHAR(20) DEFAULT \'free\';'))
+            except:
+                pass  # Column might already exist
+            
+            try:
+                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN subscription_status VARCHAR(20) DEFAULT \'active\';'))
+            except:
+                pass
+                
+            try:
+                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN subscription_expires TIMESTAMP;'))
+            except:
+                pass
+                
+            try:
+                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN calculations_used_this_month INTEGER DEFAULT 0;'))
+            except:
+                pass
+                
+            try:
+                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN last_reset_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;'))
+            except:
+                pass
+                
+            try:
+                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN stripe_customer_id VARCHAR(100);'))
+            except:
+                pass
+                
+            connection.commit()
+            
+        return "✅ Safe migration complete! New subscription fields added."
+    except Exception as e:
+        return f"❌ Safe migration failed: {e}"
+
 if __name__ == '__main__':
     with app.app_context():
         try:
