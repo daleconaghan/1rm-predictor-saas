@@ -54,7 +54,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 @app.template_filter('localtime')
-def localtime_filter(utc_dt):
+def localtime_filter(utc_dt, fmt='%m/%d/%Y %I:%M %p'):
     """Convert UTC datetime to user's local time for display"""
     if utc_dt is None:
         return ''
@@ -63,12 +63,12 @@ def localtime_filter(utc_dt):
     if utc_dt.tzinfo is None:
         utc_dt = utc_dt.replace(tzinfo=timezone.utc)
     
-    # Try to get user's timezone from session/request, default to common EU timezone
-    # Since you're 1 hour ahead of UTC, you're likely in CET/BST
+    # Convert to user's timezone (UTC+1)
     user_tz = timezone(timedelta(hours=1))  # CET/BST (UTC+1)
     local_dt = utc_dt.astimezone(user_tz)
     
-    return local_dt
+    # Return formatted string
+    return local_dt.strftime(fmt)
 
 # Initialize URL serializer for email tokens
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])

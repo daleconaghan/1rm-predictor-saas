@@ -68,7 +68,7 @@
             <div class="card bg-info text-white">
                 <div class="card-body text-center">
                     <i class="fas fa-calendar fa-2x mb-2"></i>
-                    <h4>{{ (calculations[0].created_at|localtime|strftime('%b %d') if calculations else 'N/A') }}</h4>
+                    <h4>{{ (calculations[0].created_at|localtime('%b %d') if calculations else 'N/A') }}</h4>
                     <small>Last Calculation</small>
                 </div>
             </div>
@@ -94,7 +94,7 @@
                     <tbody>
                         {% for calc in calculations %}
                         <tr>
-                            <td>{{ calc.created_at|localtime|strftime('%m/%d/%Y') }}</td>
+                            <td>{{ calc.created_at|localtime('%m/%d/%Y') }}</td>
                             <td>
                                 <span class="badge bg-secondary">{{ calc.exercise.replace('_', ' ').title() }}</span>
                             </td>
