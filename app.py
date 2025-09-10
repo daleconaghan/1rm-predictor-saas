@@ -677,54 +677,7 @@ def safe_migrate():
     except Exception as e:
         return f"❌ Safe migration failed: {e}"
 
-@app.route('/reset-usage/<username>')
-def reset_usage(username):
-    """Reset calculation count for testing - REMOVE IN PRODUCTION"""
-    try:
-        user = User.query.filter_by(username=username).first()
-        if user:
-            user.calculations_used_this_month = 0
-            db.session.commit()
-            return f"✅ Reset usage for {username} to 0/10"
-        else:
-            return f"❌ User {username} not found"
-    except Exception as e:
-        return f"❌ Reset failed: {e}"
-
-@app.route('/debug-user/<username>')
-def debug_user(username):
-    """Debug user subscription data - REMOVE IN PRODUCTION"""
-    try:
-        user = User.query.filter_by(username=username).first()
-        if user:
-            return f"""
-            <h3>Debug Info for {username}</h3>
-            <p><strong>Subscription Tier:</strong> {user.subscription_tier}</p>
-            <p><strong>Calculations Used:</strong> {user.calculations_used_this_month}</p>
-            <p><strong>Calculation Limit:</strong> {user.get_calculation_limit()}</p>
-            <p><strong>Can Calculate:</strong> {user.can_calculate()}</p>
-            <p><strong>Last Reset Date:</strong> {user.last_reset_date}</p>
-            <p><strong>Subscription Status:</strong> {user.subscription_status}</p>
-            <p><strong>Total Calculations in DB:</strong> {len(user.calculations)}</p>
-            """
-        else:
-            return f"❌ User {username} not found"
-    except Exception as e:
-        return f"❌ Debug failed: {e}"
-
-@app.route('/set-usage/<username>/<int:count>')
-def set_usage(username, count):
-    """Set calculation count for testing - REMOVE IN PRODUCTION"""
-    try:
-        user = User.query.filter_by(username=username).first()
-        if user:
-            user.calculations_used_this_month = count
-            db.session.commit()
-            return f"✅ Set usage for {username} to {count}/10"
-        else:
-            return f"❌ User {username} not found"
-    except Exception as e:
-        return f"❌ Set failed: {e}"
+# Debug routes removed for production
 
 if __name__ == '__main__':
     with app.app_context():
