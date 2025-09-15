@@ -804,4 +804,7 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Database error: {e}")
             print(f"DATABASE_URL: {os.environ.get('DATABASE_URL', 'Not set')}")
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    
+    # Use PORT from environment for Railway deployment
+    port = int(os.environ.get('PORT', 5001))
+    app.run(host='0.0.0.0', port=port, debug=False)
