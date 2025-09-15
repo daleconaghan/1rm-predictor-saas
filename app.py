@@ -1,9 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+import click
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 import pytz
 from itsdangerous import URLSafeTimedSerializer
 import os
@@ -84,32 +85,35 @@ serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 # Initialize database tables
 def init_db():
-    """Initialize database tables"""
-    try:
-        with app.app_context():
-            db.create_all()
-            print("Database tables initialized")
-    except Exception as e:
-        print(f"Database initialization failed: {e}")
+    """Initialize database tables."""
+    with app.app_context():
+        db.create_all()
 
-# Call initialization only if not in production startup
-if __name__ == '__main__':
-    init_db()
 
+def current_utc_time():
+    """Return a timezone-aware UTC datetime."""
+    return datetime.now(UTC)
+
+
+def ensure_aware(dt):
+    """Ensure a datetime is timezone-aware (UTC)."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255))
     email_verified = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), default=current_utc_time)
     
     # Subscription fields
     subscription_tier = db.Column(db.String(20), default='free')  # free, pro, coach
     subscription_status = db.Column(db.String(20), default='active')  # active, cancelled, expired
-    subscription_expires = db.Column(db.DateTime)
+    subscription_expires = db.Column(db.DateTime(timezone=True))
     calculations_used_this_month = db.Column(db.Integer, default=0)
-    last_reset_date = db.Column(db.DateTime, default=datetime.utcnow)
+    last_reset_date = db.Column(db.DateTime(timezone=True), default=current_utc_time)
     stripe_customer_id = db.Column(db.String(100))
     
     calculations = db.relationship('OneRMCalculation', backref='user', lazy=True)
@@ -127,8 +131,9 @@ class User(UserMixin, db.Model):
     def can_calculate(self):
         """Check if user can make another calculation"""
         # Reset monthly counter if needed
-        now = datetime.utcnow()
-        if self.last_reset_date and (now - self.last_reset_date).days >= 30:
+        now = current_utc_time()
+        last_reset = ensure_aware(self.last_reset_date)
+        if last_reset and (now - last_reset).days >= 30:
             self.calculations_used_this_month = 0
             self.last_reset_date = now
             db.session.commit()
@@ -149,14 +154,12 @@ class OneRMCalculation(db.Model):
     calculated_1rm = db.Column(db.Float, nullable=False)
     formula_used = db.Column(db.String(50), nullable=False)
     weight_unit = db.Column(db.String(10), default='lbs')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), default=current_utc_time)
 
 @login_manager.user_loader
 def load_user(user_id):
     try:
-        # Ensure tables exist before any database operations
-        db.create_all()
-        return User.query.get(int(user_id))
+        return db.session.get(User, int(user_id))
     except Exception as e:
         print(f"Error loading user: {e}")
         return None
@@ -358,17 +361,10 @@ class RecommendationEngine:
 
 @app.route('/')
 def index():
-    try:
-        db.create_all()
-    except Exception as e:
-        print(f"Database error on index: {e}")
     return render_template('index.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    # Ensure tables exist before any database operations
-    db.create_all()
-    
     if request.method == 'POST':
         username = request.form['username']
         email = request.form['email']
@@ -399,9 +395,6 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    # Ensure tables exist
-    db.create_all()
-    
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -488,8 +481,6 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # Ensure tables exist
-    db.create_all()
     recent_calculations = OneRMCalculation.query.filter_by(user_id=current_user.id)\
         .order_by(OneRMCalculation.created_at.desc()).limit(10).all()
     return render_template('dashboard.html', calculations=recent_calculations)
@@ -497,9 +488,6 @@ def dashboard():
 @app.route('/calculate', methods=['GET', 'POST'])
 @login_required
 def calculate():
-    # Ensure tables exist
-    db.create_all()
-    
     # Check calculation limit before processing
     if not current_user.can_calculate():
         flash(f'You have reached your monthly limit of {current_user.get_calculation_limit()} calculations. Upgrade to Pro for unlimited calculations!', 'warning')
@@ -584,44 +572,95 @@ def calculate():
 @app.route('/api/calculate', methods=['POST'])
 @login_required
 def api_calculate():
-    data = request.get_json()
-    
+    if not current_user.can_calculate():
+        limit = current_user.get_calculation_limit()
+        return jsonify({
+            'success': False,
+            'error': f'Monthly limit reached. You can perform {limit} calculations per month on your current plan.'
+        }), 403
+
+    data = request.get_json() or {}
+
     try:
         exercise = data['exercise']
+        custom_exercise = data.get('custom_exercise', '').strip()
         weight = float(data['weight'])
         reps = int(data['reps'])
-        bodyweight = data.get('bodyweight')
-        
-        if bodyweight:
-            bodyweight = float(bodyweight)
-        
-        formulas = OneRMCalculator.calculate_all_formulas(weight, reps)
-        average_1rm = OneRMCalculator.get_average_1rm(weight, reps)
-        
+        weight_unit = data.get('weight_unit', 'lbs')
+        bodyweight_raw = data.get('bodyweight')
+
+        if weight <= 0:
+            raise ValueError('Weight must be greater than zero.')
+
+        if reps < 1 or reps > 15:
+            raise ValueError('Reps must be between 1 and 15 for accurate calculations.')
+
+        if weight_unit not in ('lbs', 'kg'):
+            raise ValueError("Invalid weight_unit provided. Use 'lbs' or 'kg'.")
+
+        bodyweight = None
+        if bodyweight_raw not in (None, ''):
+            bodyweight = float(bodyweight_raw)
+            if bodyweight <= 0:
+                raise ValueError('Bodyweight must be greater than zero.')
+
+        if exercise == 'custom' and custom_exercise:
+            exercise = custom_exercise.lower().replace(' ', '_')
+
+        if weight_unit == 'kg':
+            weight_lbs = weight * 2.20462
+            bodyweight_lbs = bodyweight * 2.20462 if bodyweight is not None else None
+        else:
+            weight_lbs = weight
+            bodyweight_lbs = bodyweight
+
+        formulas_lbs = OneRMCalculator.calculate_all_formulas(weight_lbs, reps)
+        average_1rm_lbs = OneRMCalculator.get_average_1rm(weight_lbs, reps)
+
+        if weight_unit == 'kg':
+            formulas_display = {k: round(v / 2.20462, 1) for k, v in formulas_lbs.items()}
+            average_1rm_display = round(average_1rm_lbs / 2.20462, 1)
+        else:
+            formulas_display = formulas_lbs
+            average_1rm_display = average_1rm_lbs
+
         strength_level = RecommendationEngine.get_strength_level(
-            average_1rm, exercise, bodyweight
+            average_1rm_lbs, exercise, bodyweight_lbs
         )
-        
+
         recommendations = RecommendationEngine.generate_recommendations(
-            average_1rm, exercise, weight, reps, strength_level
+            average_1rm_display, exercise, weight, reps, strength_level, weight_unit
         )
-        
+
+        calculation = OneRMCalculation(
+            user_id=current_user.id,
+            exercise=exercise,
+            weight=weight,
+            reps=reps,
+            calculated_1rm=average_1rm_display,
+            formula_used='average',
+            weight_unit=weight_unit
+        )
+        db.session.add(calculation)
+        current_user.increment_calculations()
+        db.session.commit()
+
         return jsonify({
             'success': True,
-            'formulas': formulas,
-            'average_1rm': average_1rm,
+            'formulas': formulas_display,
+            'average_1rm': average_1rm_display,
             'strength_level': strength_level,
-            'recommendations': recommendations
+            'recommendations': recommendations,
+            'weight_unit': weight_unit
         })
-    
+
     except Exception as e:
+        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/history')
 @login_required
 def history():
-    # Ensure tables exist
-    db.create_all()
     calculations = OneRMCalculation.query.filter_by(user_id=current_user.id)\
         .order_by(OneRMCalculation.created_at.desc()).all()
     return render_template('history.html', calculations=calculations)
@@ -656,78 +695,104 @@ def set_timezone():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/migrate-db')
-def migrate_db():
-    try:
-        with db.engine.connect() as connection:
-            connection.execute(db.text('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(255);'))
-            connection.commit()
-        return "Database migration successful!"
-    except Exception as e:
-        return f"Migration failed: {e}"
+@app.cli.command('migrate-db')
+def migrate_db_command():
+    """Change the stored password hash column to VARCHAR(255)."""
+    engine = db.engine
+    if engine.url.get_backend_name() == 'sqlite':
+        click.echo('Skipping migrate-db: column alteration is not supported on SQLite.')
+        return
 
-@app.route('/force-migrate')
-def force_migrate():
-    """Force recreate all database tables - WARNING: Deletes all data"""
-    try:
-        with app.app_context():
-            # Drop all tables (deletes all data)
-            db.drop_all()
-            
-            # Recreate all tables with new schema
-            db.create_all()
-            
-            return "✅ Database force migration complete! All tables recreated with subscription fields."
-    except Exception as e:
-        return f"❌ Force migration failed: {e}"
+    with engine.begin() as connection:
+        connection.execute(db.text('ALTER TABLE "user" ALTER COLUMN password_hash TYPE VARCHAR(255);'))
+    click.echo('Database migration successful!')
 
-@app.route('/safe-migrate')  
-def safe_migrate():
-    """Add new subscription columns without deleting existing data"""
-    try:
-        with db.engine.connect() as connection:
-            # Add subscription fields one by one
+
+@app.cli.command('init-db')
+def init_db_command():
+    """Initialize database tables."""
+    init_db()
+    click.echo('Database tables initialized.')
+
+@app.cli.command('force-migrate')
+def force_migrate_command():
+    """Force recreate all database tables (WARNING: deletes all data)."""
+    click.confirm('This will delete all existing data. Continue?', abort=True)
+    db.drop_all()
+    db.create_all()
+    click.echo('✅ Database force migration complete! All tables recreated with subscription fields.')
+
+@app.cli.command('safe-migrate')
+def safe_migrate_command():
+    """Add subscription columns without deleting existing data."""
+    statements = [
+        'ALTER TABLE "user" ADD COLUMN subscription_tier VARCHAR(20) DEFAULT \'free\';',
+        'ALTER TABLE "user" ADD COLUMN subscription_status VARCHAR(20) DEFAULT \'active\';',
+        'ALTER TABLE "user" ADD COLUMN subscription_expires TIMESTAMP;',
+        'ALTER TABLE "user" ADD COLUMN calculations_used_this_month INTEGER DEFAULT 0;',
+        'ALTER TABLE "user" ADD COLUMN last_reset_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;',
+        'ALTER TABLE "user" ADD COLUMN stripe_customer_id VARCHAR(100);',
+        'ALTER TABLE "one_rm_calculation" ADD COLUMN weight_unit VARCHAR(10) DEFAULT \'lbs\';'
+    ]
+
+    with db.engine.begin() as connection:
+        for stmt in statements:
             try:
-                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN subscription_tier VARCHAR(20) DEFAULT \'free\';'))
-            except:
-                pass  # Column might already exist
-            
-            try:
-                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN subscription_status VARCHAR(20) DEFAULT \'active\';'))
-            except:
+                connection.execute(db.text(stmt))
+            except Exception:
+                # Ignore if column already exists
                 pass
-                
-            try:
-                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN subscription_expires TIMESTAMP;'))
-            except:
-                pass
-                
-            try:
-                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN calculations_used_this_month INTEGER DEFAULT 0;'))
-            except:
-                pass
-                
-            try:
-                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN last_reset_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;'))
-            except:
-                pass
-                
-            try:
-                connection.execute(db.text('ALTER TABLE "user" ADD COLUMN stripe_customer_id VARCHAR(100);'))
-            except:
-                pass
-            
-            # Add weight_unit field to calculations table
-            try:
-                connection.execute(db.text('ALTER TABLE "one_rm_calculation" ADD COLUMN weight_unit VARCHAR(10) DEFAULT \'lbs\';'))
-            except:
-                pass
-                
-            connection.commit()
-            
-        return "✅ Safe migration complete! New subscription and weight unit fields added."
-    except Exception as e:
-        return f"❌ Safe migration failed: {e}"
+
+    click.echo('✅ Safe migration complete! New subscription and weight unit fields added.')
+
+
+@app.cli.command('fix-naive-datetimes')
+def fix_naive_datetimes_command():
+    """Ensure stored datetimes are UTC-aware."""
+    engine = db.engine
+    if engine.url.get_backend_name() == 'sqlite':
+        click.echo('Skipping fix-naive-datetimes: SQLite does not preserve timezone info.')
+        return
+
+    fixed_users = 0
+    fixed_calculations = 0
+    needs_commit = False
+
+    # Iterate through users
+    for user in User.query.all():
+        changed = False
+
+        new_created_at = ensure_aware(user.created_at)
+        if new_created_at is not user.created_at:
+            user.created_at = new_created_at
+            changed = True
+
+        new_last_reset = ensure_aware(user.last_reset_date)
+        if new_last_reset is not user.last_reset_date:
+            user.last_reset_date = new_last_reset
+            changed = True
+
+        new_expires = ensure_aware(user.subscription_expires)
+        if new_expires is not user.subscription_expires:
+            user.subscription_expires = new_expires
+            changed = True
+
+        if changed:
+            fixed_users += 1
+            needs_commit = True
+
+    # Iterate through calculations
+    for calc in OneRMCalculation.query.all():
+        new_created_at = ensure_aware(calc.created_at)
+        if new_created_at is not calc.created_at:
+            calc.created_at = new_created_at
+            fixed_calculations += 1
+            needs_commit = True
+
+    if needs_commit:
+        db.session.commit()
+
+    click.echo(f'Updated {fixed_users} users and {fixed_calculations} calculations.')
 
 # Debug routes removed for production
 
