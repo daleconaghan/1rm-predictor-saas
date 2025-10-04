@@ -4,17 +4,54 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_wtf import CSRFProtect
+from flask_wtf.csrf import generate_csrf
 from datetime import UTC, datetime, timedelta, timezone
 import pytz
 from itsdangerous import URLSafeTimedSerializer
 import os
+import warnings
 from dotenv import load_dotenv
 import math
+import time
+from collections import defaultdict, deque
 
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+DEFAULT_SECRET_KEY = 'dev-secret-key-change-in-production'
+
+# Determine environment to decide on security defaults
+env_name = (app.config.get('ENV') or os.environ.get('FLASK_ENV') or os.environ.get('ENV') or 'production').lower()
+is_dev_environment = env_name in ('development', 'testing') or bool(app.config.get('TESTING'))
+
+secret_key = os.environ.get('SECRET_KEY')
+if not secret_key:
+    if is_dev_environment:
+        warnings.warn(
+            'SECRET_KEY environment variable is not set; falling back to a development key. '
+            'Never use this fallback in production.',
+            RuntimeWarning,
+        )
+        secret_key = DEFAULT_SECRET_KEY
+    else:
+        raise RuntimeError('SECRET_KEY environment variable must be set for non-development environments.')
+app.config['SECRET_KEY'] = secret_key
+
+csrf = CSRFProtect()
+csrf.init_app(app)
+
+
+def _generate_csrf_token():
+    if not app.config.get('WTF_CSRF_ENABLED', True):
+        return ''
+    return generate_csrf()
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {'csrf_token': _generate_csrf_token}
 
 # Use SQLite for reliable deployment (perfect for micro-SaaS)
 if os.environ.get('DATABASE_URL'):
@@ -36,10 +73,13 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 # Session configuration for proper login persistence
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_SECURE'] = not is_dev_environment
+app.config['REMEMBER_COOKIE_SECURE'] = app.config['SESSION_COOKIE_SECURE']
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+if not is_dev_environment:
+    app.config['PREFERRED_URL_SCHEME'] = 'https'
 
 # Email configuration
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
@@ -49,11 +89,72 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
 
+mail_credentials_configured = all([
+    app.config.get('MAIL_USERNAME'),
+    app.config.get('MAIL_PASSWORD'),
+    app.config.get('MAIL_DEFAULT_SENDER'),
+])
+app.config['MAIL_ENABLED'] = mail_credentials_configured
+if not mail_credentials_configured:
+    warnings.warn(
+        'Mail credentials are not fully configured; verification and password reset emails will not be sent.',
+        RuntimeWarning,
+    )
+
+if not is_dev_environment:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+    @app.before_request
+    def enforce_https_in_production():
+        if app.config.get('TESTING'):
+            return
+        if request.is_secure:
+            return
+        if request.headers.get('X-Forwarded-Proto', '').lower().startswith('https'):
+            return
+        host = request.host.split(':', 1)[0]
+        if host in {'localhost', '127.0.0.1', '0.0.0.0'}:
+            return
+        if request.method in {'GET', 'HEAD', 'OPTIONS'}:
+            secure_url = request.url.replace('http://', 'https://', 1)
+            return redirect(secure_url, code=301)
+
+
+@app.after_request
+def apply_security_headers(response):
+    if not is_dev_environment:
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return response
+
 db = SQLAlchemy(app)
 mail = Mail(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+
+@app.before_request
+def ensure_session_validity():
+    if not current_user.is_authenticated:
+        return
+
+    password_changed_at = ensure_aware(current_user.password_changed_at) or datetime.fromtimestamp(0, tz=UTC)
+    session_value = session.get('password_changed_at')
+    session_timestamp = None
+    if session_value:
+        try:
+            session_timestamp = datetime.fromisoformat(session_value)
+            if session_timestamp.tzinfo is None:
+                session_timestamp = session_timestamp.replace(tzinfo=UTC)
+        except Exception:
+            session_timestamp = None
+
+    if not session_timestamp or session_timestamp < password_changed_at:
+        session.pop('password_changed_at', None)
+        logout_user()
+        flash('Your session has expired. Please log in again.', 'warning')
+        return redirect(url_for('login'))
+
 
 @app.template_filter('localtime')
 def localtime_filter(utc_dt, fmt='%m/%d/%Y %I:%M %p'):
@@ -100,11 +201,55 @@ def ensure_aware(dt):
     if dt is None:
         return None
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+
+
+class SimpleRateLimiter:
+    """Minimal in-memory rate limiter keyed by string identifiers."""
+
+    def __init__(self):
+        self._attempts = defaultdict(deque)
+
+    def allow(self, key, limit, window_seconds):
+        now = time.monotonic()
+        attempts = self._attempts[key]
+        while attempts and now - attempts[0] > window_seconds:
+            attempts.popleft()
+        if len(attempts) >= limit:
+            return False
+        attempts.append(now)
+        return True
+
+
+def _client_identifier():
+    """Return a stable identifier for the current client for rate limiting."""
+    forwarded_for = request.headers.get('X-Forwarded-For', '')
+    if forwarded_for:
+        return forwarded_for.split(',')[0].strip()
+    return request.remote_addr or 'unknown'
+
+
+rate_limiter = SimpleRateLimiter()
+
+RATE_LIMITS = {
+    'register': (5, 300),        # 5 attempts per 5 minutes
+    'login': (10, 300),          # 10 attempts per 5 minutes
+    'password_reset': (5, 900),  # 5 attempts per 15 minutes
+}
+
+
+def enforce_rate_limit(action):
+    """Apply configured rate limit for the given action."""
+    limit, window = RATE_LIMITS[action]
+    key = f"{action}:{_client_identifier()}"
+    return rate_limiter.allow(key, limit, window)
+
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255))
+    password_changed_at = db.Column(db.DateTime(timezone=True), default=current_utc_time, nullable=False)
     email_verified = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime(timezone=True), default=current_utc_time)
     
@@ -156,6 +301,15 @@ class OneRMCalculation(db.Model):
     weight_unit = db.Column(db.String(10), default='lbs')
     created_at = db.Column(db.DateTime(timezone=True), default=current_utc_time)
 
+class Workout(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    exercise = db.Column(db.String(50), nullable=False)
+    weight = db.Column(db.Float, nullable=False)
+    reps = db.Column(db.Integer, nullable=False)
+    effort = db.Column(db.Integer)  # 1=easy, 2=medium, 3=hard
+    created_at = db.Column(db.DateTime(timezone=True), default=current_utc_time)
+
 @login_manager.user_loader
 def load_user(user_id):
     try:
@@ -166,9 +320,9 @@ def load_user(user_id):
 
 def send_verification_email(user):
     """Send email verification email"""
-    if not app.config.get('MAIL_USERNAME'):
-        print("Email not configured - verification email not sent")
-        return
+    if not app.config.get('MAIL_ENABLED'):
+        app.logger.warning('Verification email not sent for %s: mail is not configured.', user.email)
+        return False
     
     token = serializer.dumps(user.email, salt='email-verification')
     verification_url = url_for('verify_email', token=token, _external=True)
@@ -188,17 +342,20 @@ def send_verification_email(user):
     
     try:
         mail.send(msg)
-        print(f"Verification email sent to {user.email}")
+        app.logger.info('Verification email sent to %s', user.email)
+        return True
     except Exception as e:
-        print(f"Failed to send email: {e}")
+        app.logger.error('Failed to send verification email to %s: %s', user.email, e)
+        return False
 
 def send_password_reset_email(user):
     """Send password reset email"""
-    if not app.config.get('MAIL_USERNAME'):
-        print("Email not configured - reset email not sent")
-        return
-    
-    token = serializer.dumps(user.email, salt='password-reset')
+    if not app.config.get('MAIL_ENABLED'):
+        app.logger.warning('Password reset email not sent for %s: mail is not configured.', user.email)
+        return False
+
+    issued_at = int(current_utc_time().timestamp())
+    token = serializer.dumps({'email': user.email, 'iat': issued_at}, salt='password-reset')
     reset_url = url_for('reset_password', token=token, _external=True)
     
     msg = Message(
@@ -216,9 +373,11 @@ def send_password_reset_email(user):
     
     try:
         mail.send(msg)
-        print(f"Password reset email sent to {user.email}")
+        app.logger.info('Password reset email sent to %s', user.email)
+        return True
     except Exception as e:
-        print(f"Failed to send email: {e}")
+        app.logger.error('Failed to send password reset email to %s: %s', user.email, e)
+        return False
 
 class OneRMCalculator:
     @staticmethod
@@ -366,10 +525,14 @@ def index():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
+        if not enforce_rate_limit('register'):
+            flash('Too many registration attempts. Please wait a few minutes and try again.', 'warning')
+            return redirect(url_for('register'))
+
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
-        
+
         if User.query.filter_by(username=username).first():
             flash('Username already exists')
             return redirect(url_for('register'))
@@ -386,9 +549,12 @@ def register():
         )
         db.session.add(user)
         db.session.commit()
-        
-        send_verification_email(user)
-        flash('Registration successful! Please check your email to verify your account.')
+
+        if send_verification_email(user):
+            flash('Registration successful! Please check your email to verify your account.')
+        else:
+            flash('Registration successful! We could not send a verification email right now. '
+                  'Please try again later or contact support.', 'warning')
         return redirect(url_for('login'))
     
     return render_template('register.html')
@@ -396,14 +562,20 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+        if not enforce_rate_limit('login'):
+            flash('Too many login attempts. Please wait a few minutes and try again.', 'warning')
+            return redirect(url_for('login'))
+
         username = request.form['username']
         password = request.form['password']
         remember_me = request.form.get('remember_me') == 'on'
         user = User.query.filter_by(username=username).first()
-        
+
         
         if user and check_password_hash(user.password_hash, password):
             login_user(user, remember=remember_me)
+            password_changed_at = ensure_aware(user.password_changed_at) or current_utc_time()
+            session['password_changed_at'] = password_changed_at.isoformat()
             flash('Login successful!' + (' You will stay logged in for 30 days.' if remember_me else ''))
             return redirect(url_for('dashboard'))
         else:
@@ -431,15 +603,20 @@ def verify_email(token):
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
+        if not enforce_rate_limit('password_reset'):
+            flash('Too many password reset requests. Please wait a bit and try again.', 'warning')
+            return redirect(url_for('login'))
+
         email = request.form['email']
         user = User.query.filter_by(email=email).first()
-        
+
         if user:
-            send_password_reset_email(user)
-            flash('Password reset instructions sent to your email.')
+            if not send_password_reset_email(user):
+                app.logger.warning('Password reset email could not be sent for %s', email)
         else:
-            flash('Email address not found.')
-        
+            app.logger.info('Password reset requested for non-existent account: %s', email)
+
+        flash('If the email address is registered, you will receive password reset instructions shortly.')
         return redirect(url_for('login'))
     
     return render_template('forgot_password.html')
@@ -447,15 +624,35 @@ def forgot_password():
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
     try:
-        email = serializer.loads(token, salt='password-reset', max_age=3600)  # 1 hour
+        token_data = serializer.loads(token, salt='password-reset', max_age=3600)  # 1 hour
     except Exception:
         flash('Invalid or expired reset link.')
         return redirect(url_for('forgot_password'))
-    
+
+    email = token_data.get('email') if isinstance(token_data, dict) else token_data
+    if not email:
+        flash('Invalid reset link.')
+        return redirect(url_for('forgot_password'))
+
     user = User.query.filter_by(email=email).first()
     if not user:
         flash('Invalid reset link.')
         return redirect(url_for('forgot_password'))
+
+    issued_at = None
+    if isinstance(token_data, dict):
+        issued_raw = token_data.get('iat')
+        if issued_raw is not None:
+            try:
+                issued_at = datetime.fromtimestamp(int(issued_raw), tz=UTC)
+            except Exception:
+                issued_at = None
+
+    if issued_at is not None:
+        password_changed_at = ensure_aware(user.password_changed_at) or datetime.fromtimestamp(0, tz=UTC)
+        if issued_at < password_changed_at:
+            flash('Invalid or expired reset link.')
+            return redirect(url_for('forgot_password'))
     
     if request.method == 'POST':
         new_password = request.form['password']
@@ -466,16 +663,22 @@ def reset_password(token):
             return render_template('reset_password.html', token=token)
         
         user.password_hash = generate_password_hash(new_password)
+        user.password_changed_at = current_utc_time()
         db.session.commit()
-        
+        session.pop('password_changed_at', None)
+        if current_user.is_authenticated and current_user.id == user.id:
+            logout_user()
+
         flash('Password reset successful! You can now login.')
         return redirect(url_for('login'))
     
     return render_template('reset_password.html', token=token)
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
+@login_required
 def logout():
     logout_user()
+    session.pop('password_changed_at', None)
     return redirect(url_for('index'))
 
 @app.route('/dashboard')
@@ -675,14 +878,14 @@ def set_timezone():
     try:
         data = request.get_json()
         timezone_name = data.get('timezone')
-        
+
         if timezone_name:
             # Validate timezone name
             try:
                 pytz.timezone(timezone_name)
                 session['user_timezone'] = timezone_name
                 session.permanent = True
-                
+
                 return jsonify({
                     'success': True,
                     'timezone': timezone_name,
@@ -690,10 +893,49 @@ def set_timezone():
                 })
             except:
                 return jsonify({'success': False, 'error': 'Invalid timezone'})
-        
+
         return jsonify({'success': False, 'error': 'No timezone provided'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/log-workout', methods=['GET', 'POST'])
+@login_required
+def log_workout():
+    if request.method == 'POST':
+        exercise = request.form['exercise']
+        weight = float(request.form['weight'])
+        reps = int(request.form['reps'])
+        effort = int(request.form.get('effort', 2))
+
+        workout = Workout(
+            user_id=current_user.id,
+            exercise=exercise,
+            weight=weight,
+            reps=reps,
+            effort=effort
+        )
+        db.session.add(workout)
+        db.session.commit()
+
+        flash('Workout logged successfully!')
+        return redirect(url_for('my_workouts'))
+
+    return render_template('log_workout.html')
+
+@app.route('/my-workouts')
+@login_required
+def my_workouts():
+    workouts = Workout.query.filter_by(user_id=current_user.id)\
+        .order_by(Workout.created_at.desc()).all()
+    return render_template('my_workouts.html', workouts=workouts)
+
+@app.route('/ml-insights')
+@login_required
+def ml_insights():
+    # Calculate features from workout history
+    # Call your ML API
+    # Show predictions with disclaimers
+    pass
 
 @app.cli.command('migrate-db')
 def migrate_db_command():
@@ -732,6 +974,7 @@ def safe_migrate_command():
         'ALTER TABLE "user" ADD COLUMN calculations_used_this_month INTEGER DEFAULT 0;',
         'ALTER TABLE "user" ADD COLUMN last_reset_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;',
         'ALTER TABLE "user" ADD COLUMN stripe_customer_id VARCHAR(100);',
+        'ALTER TABLE "user" ADD COLUMN password_changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;',
         'ALTER TABLE "one_rm_calculation" ADD COLUMN weight_unit VARCHAR(10) DEFAULT \'lbs\';'
     ]
 
@@ -743,7 +986,7 @@ def safe_migrate_command():
                 # Ignore if column already exists
                 pass
 
-    click.echo('✅ Safe migration complete! New subscription and weight unit fields added.')
+    click.echo('✅ Safe migration complete! New subscription, security, and weight unit fields added.')
 
 
 @app.cli.command('fix-naive-datetimes')
@@ -775,6 +1018,11 @@ def fix_naive_datetimes_command():
         new_expires = ensure_aware(user.subscription_expires)
         if new_expires is not user.subscription_expires:
             user.subscription_expires = new_expires
+            changed = True
+
+        new_password_changed = ensure_aware(user.password_changed_at)
+        if new_password_changed is not user.password_changed_at:
+            user.password_changed_at = new_password_changed
             changed = True
 
         if changed:
