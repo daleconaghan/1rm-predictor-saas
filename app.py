@@ -537,14 +537,14 @@ class MLInsightsEngine:
             return None
 
         # Sort by date
-        calculations = sorted(calculations, key=lambda x: x.created_at)
+        calculations = sorted(calculations, key=lambda x: ensure_aware(x.created_at))
 
         # Get first and last calculations
         first = calculations[0]
         last = calculations[-1]
 
         # Calculate time difference in weeks
-        time_diff = (last.created_at - first.created_at).total_seconds() / (7 * 24 * 3600)
+        time_diff = (ensure_aware(last.created_at) - ensure_aware(first.created_at)).total_seconds() / (7 * 24 * 3600)
         if time_diff == 0:
             return None
 
@@ -574,18 +574,18 @@ class MLInsightsEngine:
             return None
 
         # Sort by date
-        exercise_calcs = sorted(exercise_calcs, key=lambda x: x.created_at)
+        exercise_calcs = sorted(exercise_calcs, key=lambda x: ensure_aware(x.created_at))
 
         # Use last 90 days for prediction
         cutoff_date = current_utc_time() - timedelta(days=90)
-        recent_calcs = [c for c in exercise_calcs if c.created_at >= cutoff_date]
+        recent_calcs = [c for c in exercise_calcs if ensure_aware(c.created_at) >= cutoff_date]
 
         if len(recent_calcs) < 2:
             recent_calcs = exercise_calcs[-5:]  # Use last 5 if not enough recent data
 
         # Simple linear regression
-        first_date = recent_calcs[0].created_at
-        x_values = [(c.created_at - first_date).total_seconds() / (24 * 3600) for c in recent_calcs]
+        first_date = ensure_aware(recent_calcs[0].created_at)
+        x_values = [(ensure_aware(c.created_at) - first_date).total_seconds() / (24 * 3600) for c in recent_calcs]
         y_values = [c.calculated_1rm for c in recent_calcs]
 
         n = len(x_values)
@@ -637,11 +637,11 @@ class MLInsightsEngine:
             return None
 
         # Sort by date
-        exercise_calcs = sorted(exercise_calcs, key=lambda x: x.created_at)
+        exercise_calcs = sorted(exercise_calcs, key=lambda x: ensure_aware(x.created_at))
 
         # Get calculations in the plateau window
         cutoff_date = current_utc_time() - timedelta(days=plateau_days)
-        recent_calcs = [c for c in exercise_calcs if c.created_at >= cutoff_date]
+        recent_calcs = [c for c in exercise_calcs if ensure_aware(c.created_at) >= cutoff_date]
 
         if len(recent_calcs) < 2:
             return None
@@ -651,7 +651,7 @@ class MLInsightsEngine:
         min_recent = min(c.calculated_1rm for c in recent_calcs)
 
         # Get historical best (before plateau window)
-        historical_calcs = [c for c in exercise_calcs if c.created_at < cutoff_date]
+        historical_calcs = [c for c in exercise_calcs if ensure_aware(c.created_at) < cutoff_date]
         historical_max = max((c.calculated_1rm for c in historical_calcs), default=0)
 
         improvement_pct = ((max_recent - min_recent) / min_recent * 100) if min_recent > 0 else 0
@@ -740,7 +740,7 @@ class MLInsightsEngine:
             return None
 
         cutoff_date = current_utc_time() - timedelta(days=days)
-        recent_workouts = [w for w in workouts if w.created_at >= cutoff_date]
+        recent_workouts = [w for w in workouts if ensure_aware(w.created_at) >= cutoff_date]
 
         if not recent_workouts:
             return None
@@ -800,8 +800,8 @@ class MLInsightsEngine:
                 pr_calc = max(exercise_calcs, key=lambda x: x.calculated_1rm)
 
                 # Find time since last PR
-                recent_calcs = sorted(exercise_calcs, key=lambda x: x.created_at, reverse=True)
-                days_since_pr = (current_utc_time() - pr_calc.created_at).days
+                recent_calcs = sorted(exercise_calcs, key=lambda x: ensure_aware(x.created_at), reverse=True)
+                days_since_pr = (current_utc_time() - ensure_aware(pr_calc.created_at)).days
 
                 prs[exercise] = {
                     '1rm': round(pr_calc.calculated_1rm, 2),
