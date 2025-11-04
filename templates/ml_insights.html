@@ -5,9 +5,19 @@
 {% block content %}
 <div class="container my-5">
     <div class="row mb-4">
-        <div class="col-12">
+        <div class="col-md-8">
             <h1><i class="fas fa-brain"></i> ML Insights Dashboard</h1>
             <p class="text-muted">Data-driven analysis of your training progress and performance predictions</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <div class="btn-group mt-3" role="group" aria-label="Unit selector">
+                <button type="button" class="btn btn-outline-primary active" id="unit-lbs" onclick="switchUnit('lbs')">
+                    <i class="fas fa-weight"></i> lbs
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="unit-kg" onclick="switchUnit('kg')">
+                    <i class="fas fa-weight"></i> kg
+                </button>
+            </div>
         </div>
     </div>
 
@@ -56,7 +66,7 @@
                         <div class="col-md-3 col-sm-6 mb-3">
                             <div class="text-center p-3 border rounded">
                                 <h6 class="text-muted">{{ exercise.replace('_', ' ').title() }}</h6>
-                                <h3 class="text-warning mb-0">{{ pr['1rm'] }} {{ pr.unit }}</h3>
+                                <h3 class="text-warning mb-0"><span class="weight-value" data-lbs="{{ pr['1rm'] }}">{{ pr['1rm'] }}</span> <span class="unit-label">{{ pr.unit }}</span></h3>
                                 <small class="text-muted">
                                     {% if pr.days_ago == 0 %}
                                     Today!
@@ -91,18 +101,14 @@
                         <h6><i class="fas fa-rocket"></i> Progress Velocity</h6>
                         <div class="mt-2">
                             <h4 class="text-success mb-1">
-                                {% if insights.velocity.velocity_per_week > 0 %}
-                                +{{ insights.velocity.velocity_per_week }}
-                                {% else %}
-                                {{ insights.velocity.velocity_per_week }}
-                                {% endif %}
-                                {{ insights.velocity.unit }}/week
+                                {% if insights.velocity.velocity_per_week > 0 %}+{% endif %}<span class="weight-value" data-lbs="{{ insights.velocity.velocity_per_week }}">{{ insights.velocity.velocity_per_week }}</span>
+                                <span class="unit-label">{{ insights.velocity.unit }}</span>/week
                             </h4>
                             <p class="text-muted mb-1">
                                 <strong>{{ insights.velocity.percent_improvement }}%</strong> improvement
                             </p>
                             <small class="text-muted">
-                                {{ insights.velocity.first_1rm }} → {{ insights.velocity.latest_1rm }} {{ insights.velocity.unit }}<br>
+                                <span class="weight-value" data-lbs="{{ insights.velocity.first_1rm }}">{{ insights.velocity.first_1rm }}</span> → <span class="weight-value" data-lbs="{{ insights.velocity.latest_1rm }}">{{ insights.velocity.latest_1rm }}</span> <span class="unit-label">{{ insights.velocity.unit }}</span><br>
                                 Over {{ insights.velocity.time_span_weeks }} weeks
                             </small>
                         </div>
@@ -119,9 +125,9 @@
                             {% for days, pred in insights.predictions.items() %}
                             <div class="mb-2">
                                 <strong>{{ days }} days:</strong>
-                                <span class="text-primary">{{ pred.predicted_1rm }} {{ pred.unit }}</span>
+                                <span class="text-primary"><span class="weight-value" data-lbs="{{ pred.predicted_1rm }}">{{ pred.predicted_1rm }}</span> <span class="unit-label">{{ pred.unit }}</span></span>
                                 {% if pred.predicted_gain > 0 %}
-                                <span class="badge bg-success">+{{ pred.predicted_gain }}</span>
+                                <span class="badge bg-success">+<span class="weight-value" data-lbs="{{ pred.predicted_gain }}">{{ pred.predicted_gain }}</span></span>
                                 {% endif %}
                             </div>
                             {% endfor %}
@@ -150,7 +156,7 @@
                             </p>
                             {% if insights.plateau.historical_best %}
                             <small class="text-muted">
-                                Historical best: {{ insights.plateau.historical_best }}
+                                Historical best: <span class="weight-value" data-lbs="{{ insights.plateau.historical_best }}">{{ insights.plateau.historical_best }}</span>
                                 {% if insights.plateau.below_historical_best %}
                                 <span class="text-danger">(currently below)</span>
                                 {% endif %}
@@ -179,7 +185,7 @@
                 <div class="col-md-3 col-sm-6 mb-3">
                     <div class="text-center p-3 border rounded">
                         <h6>{{ exercise.replace('_', ' ').title() }}</h6>
-                        <h4 class="mb-2">{{ analysis.current }}</h4>
+                        <h4 class="mb-2"><span class="weight-value" data-lbs="{{ analysis.current }}">{{ analysis.current }}</span></h4>
                         <span class="badge
                             {% if analysis.status == 'strong' %}bg-success
                             {% elif analysis.status == 'weak' %}bg-warning text-dark
@@ -187,9 +193,9 @@
                             {{ analysis.status.upper() }}
                         </span>
                         <p class="text-muted mb-0 mt-2">
-                            Expected: {{ analysis.expected }}<br>
+                            Expected: <span class="weight-value" data-lbs="{{ analysis.expected }}">{{ analysis.expected }}</span><br>
                             <small>
-                                {% if analysis.difference > 0 %}+{% endif %}{{ analysis.difference }}
+                                {% if analysis.difference > 0 %}+{% endif %}<span class="weight-value" data-lbs="{{ analysis.difference|abs }}">{{ analysis.difference }}</span>
                                 ({{ analysis.difference_pct }}%)
                             </small>
                         </p>
@@ -226,14 +232,14 @@
                 <div class="col-md-4">
                     <div class="text-center p-3 bg-light rounded">
                         <h6 class="text-muted">Total Volume</h6>
-                        <h3>{{ volume_trends.total_volume|int }}</h3>
-                        <small class="text-muted">lbs × reps</small>
+                        <h3><span class="weight-value" data-lbs="{{ volume_trends.total_volume }}">{{ volume_trends.total_volume|int }}</span></h3>
+                        <small class="text-muted"><span class="volume-label">lbs × reps</span></small>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="text-center p-3 bg-light rounded">
                         <h6 class="text-muted">Avg Volume/Workout</h6>
-                        <h3>{{ volume_trends.avg_volume_per_workout|int }}</h3>
+                        <h3><span class="weight-value" data-lbs="{{ volume_trends.avg_volume_per_workout }}">{{ volume_trends.avg_volume_per_workout|int }}</span></h3>
                     </div>
                 </div>
             </div>
@@ -292,4 +298,58 @@
         </small>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Unit conversion: 1 lb = 0.453592 kg
+const LBS_TO_KG = 0.453592;
+let currentUnit = 'lbs';  // Default unit
+
+function switchUnit(unit) {
+    if (unit === currentUnit) return;
+
+    localStorage.setItem('preferredUnit', unit);
+    currentUnit = unit;
+
+    // Update button states
+    document.getElementById('unit-lbs').classList.toggle('active');
+    document.getElementById('unit-kg').classList.toggle('active');
+
+    // Convert all weight values
+    const weightElements = document.querySelectorAll('.weight-value');
+    weightElements.forEach(element => {
+        const lbsValue = parseFloat(element.dataset.lbs);
+        let displayValue;
+
+        if (unit === 'kg') {
+            displayValue = (lbsValue * LBS_TO_KG).toFixed(1);
+        } else {
+            displayValue = lbsValue.toFixed(1);
+        }
+
+        element.textContent = displayValue;
+    });
+
+    // Update all unit labels
+    const unitLabels = document.querySelectorAll('.unit-label');
+    unitLabels.forEach(label => {
+        label.textContent = unit;
+    });
+
+    // Update volume labels
+    const volumeLabels = document.querySelectorAll('.volume-label');
+    volumeLabels.forEach(label => {
+        label.textContent = unit + ' × reps';
+    });
+}
+
+// Load saved unit preference on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const savedUnit = localStorage.getItem('preferredUnit');
+    if (savedUnit && savedUnit !== 'lbs') {
+        switchUnit(savedUnit);
+    }
+});
+</script>
 {% endblock %}
