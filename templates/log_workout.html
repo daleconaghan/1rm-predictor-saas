@@ -1,47 +1,218 @@
 {% extends "base.html" %}
+
+{% block title %}Log Workout - 1RM Predictor{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
-    <h2>Log Workout</h2>
+<div class="container my-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-dumbbell fa-3x text-success mb-3"></i>
+                        <h2>Log Workout</h2>
+                        <p class="text-muted">Track your training sets and volume</p>
+                    </div>
 
-    <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <form method="POST" id="logWorkoutForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-        <div class="mb-3">
-            <label class="form-label">Exercise</label>
-            <select name="exercise" class="form-control" required>
-                <option value="bench_press">Bench Press</option>
-                <option value="squat">Squat</option>
-                <option value="deadlift">Deadlift</option>
-                <option value="overhead_press">Overhead Press</option>
-            </select>
-        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="exercise" class="form-label">Exercise</label>
+                                <select class="form-select" id="exercise" name="exercise" required onchange="toggleCustomExercise()">
+                                    <option value="">Select Exercise</option>
+                                    <option value="bench_press">Bench Press</option>
+                                    <option value="squat">Squat</option>
+                                    <option value="deadlift">Deadlift</option>
+                                    <option value="overhead_press">Overhead Press</option>
+                                    <option value="incline_bench">Incline Bench Press</option>
+                                    <option value="close_grip_bench">Close Grip Bench Press</option>
+                                    <option value="front_squat">Front Squat</option>
+                                    <option value="sumo_deadlift">Sumo Deadlift</option>
+                                    <option value="romanian_deadlift">Romanian Deadlift</option>
+                                    <option value="barbell_row">Barbell Row</option>
+                                    <option value="pull_up">Pull Up</option>
+                                    <option value="chin_up">Chin Up</option>
+                                    <option value="dip">Dip</option>
+                                    <option value="custom">Add Custom Exercise</option>
+                                </select>
+                            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Weight (lbs)</label>
-            <input type="number" step="0.1" name="weight" class="form-control" required>
-        </div>
+                            <div class="col-md-6" id="customExerciseDiv" style="display: none;">
+                                <label for="custom_exercise" class="form-label">Custom Exercise Name</label>
+                                <input type="text" class="form-control" id="custom_exercise" name="custom_exercise"
+                                       placeholder="Enter exercise name">
+                            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Reps</label>
-            <input type="number" name="reps" class="form-control" required>
-        </div>
+                            <div class="col-md-6">
+                                <label for="weight_unit" class="form-label">Weight Unit</label>
+                                <select class="form-select" id="weight_unit" name="weight_unit" required onchange="updateWeightLabel()">
+                                    <option value="lbs">Pounds (lbs)</option>
+                                    <option value="kg">Kilograms (kg)</option>
+                                </select>
+                            </div>
 
-        <div class="mb-3">
-            <label class="form-label">How hard?</label><br>
-            <div class="btn-group" role="group">
-                <input type="radio" class="btn-check" name="effort" value="1" id="easy">
-                <label class="btn btn-outline-success" for="easy">Easy</label>
+                            <div class="col-md-6">
+                                <label for="weight" class="form-label">Weight (<span id="weightUnitLabel">lbs</span>)</label>
+                                <input type="number" class="form-control" id="weight" name="weight"
+                                       step="0.1" min="0" required>
+                            </div>
 
-                <input type="radio" class="btn-check" name="effort" value="2" id="medium" checked>
-                <label class="btn btn-outline-warning" for="medium">Medium</label>
+                            <div class="col-md-6">
+                                <label for="reps" class="form-label">Reps Completed</label>
+                                <input type="number" class="form-control" id="reps" name="reps"
+                                       min="1" required>
+                            </div>
 
-                <input type="radio" class="btn-check" name="effort" value="3" id="hard">
-                <label class="btn btn-outline-danger" for="hard">Hard</label>
+                            <div class="col-md-6">
+                                <label class="form-label">Effort Level</label><br>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" name="effort" value="1" id="easy">
+                                    <label class="btn btn-outline-success" for="easy">
+                                        <i class="fas fa-smile"></i> Easy
+                                    </label>
+
+                                    <input type="radio" class="btn-check" name="effort" value="2" id="medium" checked>
+                                    <label class="btn btn-outline-warning" for="medium">
+                                        <i class="fas fa-meh"></i> Medium
+                                    </label>
+
+                                    <input type="radio" class="btn-check" name="effort" value="3" id="hard">
+                                    <label class="btn btn-outline-danger" for="hard">
+                                        <i class="fas fa-fire"></i> Hard
+                                    </label>
+                                </div>
+                                <div class="form-text mt-2">How challenging was this set?</div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 text-center">
+                            <button type="submit" class="btn btn-success btn-lg px-5 me-2">
+                                <i class="fas fa-plus"></i> Log Workout
+                            </button>
+                            <a href="{{ url_for('my_workouts') }}" class="btn btn-secondary btn-lg px-5">
+                                <i class="fas fa-history"></i> View History
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="row mt-4 g-3">
+                <div class="col-md-4">
+                    <div class="card text-center border-success">
+                        <div class="card-body">
+                            <i class="fas fa-chart-area fa-2x text-success mb-2"></i>
+                            <h6>Volume Tracking</h6>
+                            <small class="text-muted">Monitor total training load</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center border-primary">
+                        <div class="card-body">
+                            <i class="fas fa-brain fa-2x text-primary mb-2"></i>
+                            <h6>ML Analysis</h6>
+                            <small class="text-muted">Insights from workout patterns</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center border-warning">
+                        <div class="card-body">
+                            <i class="fas fa-tachometer-alt fa-2x text-warning mb-2"></i>
+                            <h6>Effort Distribution</h6>
+                            <small class="text-muted">Optimize training intensity</small>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <button type="submit" class="btn btn-primary">Log Workout</button>
-        <a href="{{ url_for('my_workouts') }}" class="btn btn-secondary">View History</a>
-    </form>
+    </div>
 </div>
+
+<div class="bg-light py-4 mt-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-10 mx-auto">
+                <h5 class="text-center mb-4">Why Track Your Workouts?</h5>
+                <div class="row g-4 small">
+                    <div class="col-md-6">
+                        <div class="d-flex">
+                            <i class="fas fa-chart-line text-success me-3 mt-1"></i>
+                            <div>
+                                <strong>Volume Monitoring</strong><br>
+                                Track total training volume to ensure progressive overload and recovery.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex">
+                            <i class="fas fa-brain text-primary me-3 mt-1"></i>
+                            <div>
+                                <strong>ML Insights</strong><br>
+                                Get personalized insights from your training patterns and effort distribution.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex">
+                            <i class="fas fa-history text-warning me-3 mt-1"></i>
+                            <div>
+                                <strong>Progress History</strong><br>
+                                Review your workout history to identify trends and plateaus.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex">
+                            <i class="fas fa-target text-info me-3 mt-1"></i>
+                            <div>
+                                <strong>Effort Balance</strong><br>
+                                Maintain optimal mix of easy, medium, and hard training sessions.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleCustomExercise() {
+    const exerciseSelect = document.getElementById('exercise');
+    const customDiv = document.getElementById('customExerciseDiv');
+    const customInput = document.getElementById('custom_exercise');
+
+    if (exerciseSelect.value === 'custom') {
+        customDiv.style.display = 'block';
+        customInput.required = true;
+    } else {
+        customDiv.style.display = 'none';
+        customInput.required = false;
+        customInput.value = '';
+    }
+}
+
+function updateWeightLabel() {
+    const weightUnit = document.getElementById('weight_unit').value;
+    document.getElementById('weightUnitLabel').textContent = weightUnit;
+}
+
+// Form validation
+document.getElementById('logWorkoutForm').addEventListener('submit', function(e) {
+    const exercise = document.getElementById('exercise').value;
+    const customExercise = document.getElementById('custom_exercise').value;
+
+    if (exercise === 'custom' && !customExercise.trim()) {
+        e.preventDefault();
+        alert('Please enter a custom exercise name.');
+        return false;
+    }
+});
+</script>
 {% endblock %}

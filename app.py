@@ -308,6 +308,7 @@ class Workout(db.Model):
     weight = db.Column(db.Float, nullable=False)
     reps = db.Column(db.Integer, nullable=False)
     effort = db.Column(db.Integer)  # 1=easy, 2=medium, 3=hard
+    weight_unit = db.Column(db.String(10), default='lbs')
     created_at = db.Column(db.DateTime(timezone=True), default=current_utc_time)
 
 @login_manager.user_loader
@@ -1199,16 +1200,27 @@ def set_timezone():
 def log_workout():
     if request.method == 'POST':
         exercise = request.form['exercise']
+
+        # Handle custom exercise
+        if exercise == 'custom':
+            custom_exercise = request.form.get('custom_exercise', '').strip()
+            if not custom_exercise:
+                flash('Please enter a custom exercise name.', 'error')
+                return redirect(url_for('log_workout'))
+            exercise = custom_exercise.lower().replace(' ', '_')
+
         weight = float(request.form['weight'])
         reps = int(request.form['reps'])
         effort = int(request.form.get('effort', 2))
+        weight_unit = request.form.get('weight_unit', 'lbs')
 
         workout = Workout(
             user_id=current_user.id,
             exercise=exercise,
             weight=weight,
             reps=reps,
-            effort=effort
+            effort=effort,
+            weight_unit=weight_unit
         )
         db.session.add(workout)
         db.session.commit()
