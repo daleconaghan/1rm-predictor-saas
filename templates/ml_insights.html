@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}ML Insights - 1RM Predictor{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1><i class="fas fa-brain"></i> ML Insights Dashboard</h1>
+            <p class="text-muted">Data-driven analysis of your training progress and performance predictions</p>
+        </div>
+    </div>
+
+    <!-- Overall Progress Score -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card border-{{ progress_class }} shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-chart-line"></i> Overall Progress Score</h5>
+                    <div class="d-flex align-items-center mt-3">
+                        <div class="progress flex-grow-1" style="height: 30px;">
+                            <div class="progress-bar bg-{{ progress_class }}" role="progressbar"
+                                 style="width: {{ progress_score }}%;"
+                                 aria-valuenow="{{ progress_score }}" aria-valuemin="0" aria-valuemax="100">
+                                {{ progress_score }}%
+                            </div>
+                        </div>
+                        <span class="badge bg-{{ progress_class }} ms-3 fs-6">{{ progress_level }}</span>
+                    </div>
+                    <p class="text-muted mt-2 mb-0">Based on {{ total_calculations }} calculations and {{ total_workouts }} workouts</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card bg-primary text-white shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-info-circle"></i> About ML Insights</h5>
+                    <p class="mb-0">Our algorithms analyze your training history using linear regression, trend analysis, and statistical methods to provide personalized predictions and recommendations.</p>
+                    <small class="text-white-50">Note: Predictions are estimates based on historical data.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Personal Records -->
+    {% if prs %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-trophy"></i> Personal Records</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for exercise, pr in prs.items() %}
+                        <div class="col-md-3 col-sm-6 mb-3">
+                            <div class="text-center p-3 border rounded">
+                                <h6 class="text-muted">{{ exercise.replace('_', ' ').title() }}</h6>
+                                <h3 class="text-warning mb-0">{{ pr['1rm'] }} {{ pr.unit }}</h3>
+                                <small class="text-muted">
+                                    {% if pr.days_ago == 0 %}
+                                    Today!
+                                    {% elif pr.days_ago == 1 %}
+                                    Yesterday
+                                    {% else %}
+                                    {{ pr.days_ago }} days ago
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Insights by Exercise -->
+    {% for exercise, insights in insights_by_exercise.items() %}
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0"><i class="fas fa-dumbbell"></i> {{ exercise.replace('_', ' ').title() }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <!-- Progress Velocity -->
+                {% if insights.velocity %}
+                <div class="col-md-4 mb-3">
+                    <div class="border rounded p-3 h-100">
+                        <h6><i class="fas fa-rocket"></i> Progress Velocity</h6>
+                        <div class="mt-2">
+                            <h4 class="text-success mb-1">
+                                {% if insights.velocity.velocity_per_week > 0 %}
+                                +{{ insights.velocity.velocity_per_week }}
+                                {% else %}
+                                {{ insights.velocity.velocity_per_week }}
+                                {% endif %}
+                                {{ insights.velocity.unit }}/week
+                            </h4>
+                            <p class="text-muted mb-1">
+                                <strong>{{ insights.velocity.percent_improvement }}%</strong> improvement
+                            </p>
+                            <small class="text-muted">
+                                {{ insights.velocity.first_1rm }} → {{ insights.velocity.latest_1rm }} {{ insights.velocity.unit }}<br>
+                                Over {{ insights.velocity.time_span_weeks }} weeks
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Predictions -->
+                {% if insights.predictions %}
+                <div class="col-md-4 mb-3">
+                    <div class="border rounded p-3 h-100">
+                        <h6><i class="fas fa-crystal-ball"></i> Future Predictions</h6>
+                        <div class="mt-2">
+                            {% for days, pred in insights.predictions.items() %}
+                            <div class="mb-2">
+                                <strong>{{ days }} days:</strong>
+                                <span class="text-primary">{{ pred.predicted_1rm }} {{ pred.unit }}</span>
+                                {% if pred.predicted_gain > 0 %}
+                                <span class="badge bg-success">+{{ pred.predicted_gain }}</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            <small class="text-muted">
+                                Confidence:
+                                <span class="badge bg-secondary">{{ insights.predictions[30].confidence }}</span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Plateau Detection -->
+                {% if insights.plateau %}
+                <div class="col-md-4 mb-3">
+                    <div class="border rounded p-3 h-100 {% if insights.plateau.is_plateau %}bg-light{% endif %}">
+                        <h6><i class="fas fa-chart-bar"></i> Plateau Analysis</h6>
+                        <div class="mt-2">
+                            {% if insights.plateau.is_plateau %}
+                            <span class="badge bg-warning text-dark fs-6 mb-2">Plateau Detected</span>
+                            {% else %}
+                            <span class="badge bg-success fs-6 mb-2">Progressing</span>
+                            {% endif %}
+                            <p class="mb-1">
+                                <strong>{{ insights.plateau.improvement_pct }}%</strong> improvement in {{ insights.plateau.days_analyzed }} days
+                            </p>
+                            {% if insights.plateau.historical_best %}
+                            <small class="text-muted">
+                                Historical best: {{ insights.plateau.historical_best }}
+                                {% if insights.plateau.below_historical_best %}
+                                <span class="text-danger">(currently below)</span>
+                                {% endif %}
+                            </small><br>
+                            {% endif %}
+                            <small class="text-muted">{{ insights.plateau.recommendation }}</small>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Strength Balance Analysis -->
+    {% if balance and balance.balance %}
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="fas fa-balance-scale"></i> Strength Balance Analysis</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Comparing your lifts to typical strength ratios (baseline: {{ balance.baseline.replace('_', ' ').title() }})</p>
+            <div class="row">
+                {% for exercise, analysis in balance.balance.items() %}
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <div class="text-center p-3 border rounded">
+                        <h6>{{ exercise.replace('_', ' ').title() }}</h6>
+                        <h4 class="mb-2">{{ analysis.current }}</h4>
+                        <span class="badge
+                            {% if analysis.status == 'strong' %}bg-success
+                            {% elif analysis.status == 'weak' %}bg-warning text-dark
+                            {% else %}bg-secondary{% endif %}">
+                            {{ analysis.status.upper() }}
+                        </span>
+                        <p class="text-muted mb-0 mt-2">
+                            Expected: {{ analysis.expected }}<br>
+                            <small>
+                                {% if analysis.difference > 0 %}+{% endif %}{{ analysis.difference }}
+                                ({{ analysis.difference_pct }}%)
+                            </small>
+                        </p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="alert alert-info mt-3">
+                <small>
+                    <strong>Typical Ratios:</strong> Deadlift (strongest) > Squat > Bench Press > Overhead Press<br>
+                    <strong>Strong:</strong> More than 10% above expected |
+                    <strong>Balanced:</strong> Within ±10% |
+                    <strong>Weak:</strong> More than 10% below expected
+                </small>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Volume Trends -->
+    {% if volume_trends %}
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="fas fa-chart-area"></i> Training Volume (Last {{ volume_trends.days_analyzed }} Days)</h5>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <div class="text-center p-3 bg-light rounded">
+                        <h6 class="text-muted">Total Workouts</h6>
+                        <h3>{{ volume_trends.total_workouts }}</h3>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center p-3 bg-light rounded">
+                        <h6 class="text-muted">Total Volume</h6>
+                        <h3>{{ volume_trends.total_volume|int }}</h3>
+                        <small class="text-muted">lbs × reps</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center p-3 bg-light rounded">
+                        <h6 class="text-muted">Avg Volume/Workout</h6>
+                        <h3>{{ volume_trends.avg_volume_per_workout|int }}</h3>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exercise Frequency -->
+            <h6 class="mt-4">Exercise Frequency</h6>
+            <div class="row">
+                {% for exercise, frequency in volume_trends.exercise_frequency.items() %}
+                <div class="col-md-3 col-sm-6 mb-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>{{ exercise.replace('_', ' ').title() }}</span>
+                        <span class="badge bg-primary">{{ frequency }}x</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Effort Distribution -->
+            <h6 class="mt-4">Effort Distribution</h6>
+            <div class="progress" style="height: 30px;">
+                <div class="progress-bar bg-success" style="width: {{ volume_trends.effort_distribution.easy }}%">
+                    Easy ({{ volume_trends.effort_distribution.easy }}%)
+                </div>
+                <div class="progress-bar bg-warning" style="width: {{ volume_trends.effort_distribution.medium }}%">
+                    Medium ({{ volume_trends.effort_distribution.medium }}%)
+                </div>
+                <div class="progress-bar bg-danger" style="width: {{ volume_trends.effort_distribution.hard }}%">
+                    Hard ({{ volume_trends.effort_distribution.hard }}%)
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Action Buttons -->
+    <div class="row mt-4">
+        <div class="col-12 text-center">
+            <a href="{{ url_for('calculate') }}" class="btn btn-primary btn-lg me-2">
+                <i class="fas fa-calculator"></i> Calculate 1RM
+            </a>
+            <a href="{{ url_for('log_workout') }}" class="btn btn-success btn-lg me-2">
+                <i class="fas fa-plus"></i> Log Workout
+            </a>
+            <a href="{{ url_for('history') }}" class="btn btn-secondary btn-lg">
+                <i class="fas fa-history"></i> View History
+            </a>
+        </div>
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="alert alert-warning mt-4">
+        <small>
+            <strong>Disclaimer:</strong> ML predictions are based on statistical analysis of your historical data.
+            Actual results may vary based on training consistency, nutrition, recovery, and other factors.
+            These insights are for informational purposes only and should not replace professional coaching advice.
+        </small>
+    </div>
+</div>
+{% endblock %}

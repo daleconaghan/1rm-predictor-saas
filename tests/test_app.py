@@ -1,7 +1,7 @@
 import os
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from werkzeug.security import generate_password_hash
 
@@ -10,8 +10,10 @@ from app import (
     db,
     OneRMCalculator,
     RecommendationEngine,
+    MLInsightsEngine,
     User,
     OneRMCalculation,
+    Workout,
 )
 
 
@@ -148,6 +150,206 @@ class AppTestCase(unittest.TestCase):
         result = self.cli_runner.invoke(args=['fix-naive-datetimes'])
         self.assertEqual(result.exit_code, 0)
         self.assertIn('Skipping fix-naive-datetimes', result.output)
+
+    def test_ml_insights_requires_data(self):
+        """Test that ML insights redirects when insufficient data"""
+        user = self.create_user(username='newuser')
+        with self.client:
+            self.login(username=user.username)
+            response = self.client.get('/ml-insights', follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        # Should redirect to calculate page with a flash message
+
+    def test_ml_insights_progress_velocity(self):
+        """Test progress velocity calculation"""
+        user = self.create_user()
+        # Create calculations over time
+        calcs = []
+        for i in range(5):
+            calc = OneRMCalculation(
+                user_id=user.id,
+                exercise='bench_press',
+                weight=200 + i * 10,
+                reps=5,
+                calculated_1rm=220 + i * 10,
+                formula_used='average',
+                weight_unit='lbs',
+                created_at=datetime.now(UTC).replace(hour=0, minute=0, second=0) - timedelta(days=30 * (4 - i))
+            )
+            calcs.append(calc)
+            db.session.add(calc)
+        db.session.commit()
+
+        velocity = MLInsightsEngine.calculate_progress_velocity(calcs, 'bench_press')
+        self.assertIsNotNone(velocity)
+        self.assertGreater(velocity['velocity_per_week'], 0)
+        self.assertEqual(velocity['first_1rm'], 220)
+        self.assertEqual(velocity['latest_1rm'], 260)
+
+    def test_ml_insights_predict_future_1rm(self):
+        """Test future 1RM prediction"""
+        user = self.create_user()
+        # Create upward trending calculations
+        calcs = []
+        for i in range(5):
+            calc = OneRMCalculation(
+                user_id=user.id,
+                exercise='squat',
+                weight=300 + i * 20,
+                reps=5,
+                calculated_1rm=350 + i * 20,
+                formula_used='average',
+                weight_unit='lbs',
+                created_at=datetime.now(UTC) - timedelta(days=20 * (4 - i))
+            )
+            calcs.append(calc)
+            db.session.add(calc)
+        db.session.commit()
+
+        prediction = MLInsightsEngine.predict_future_1rm(calcs, 'squat', days_ahead=30)
+        self.assertIsNotNone(prediction)
+        self.assertGreaterEqual(prediction['predicted_1rm'], prediction['current_1rm'])
+        self.assertIn('confidence', prediction)
+
+    def test_ml_insights_detect_plateau(self):
+        """Test plateau detection"""
+        user = self.create_user()
+        # Create plateau scenario (no progress in recent period)
+        calcs = []
+        for i in range(5):
+            calc = OneRMCalculation(
+                user_id=user.id,
+                exercise='deadlift',
+                weight=400,
+                reps=5,
+                calculated_1rm=450,  # Same 1RM (plateau)
+                formula_used='average',
+                weight_unit='lbs',
+                created_at=datetime.now(UTC) - timedelta(days=7 * (4 - i))
+            )
+            calcs.append(calc)
+            db.session.add(calc)
+        db.session.commit()
+
+        plateau = MLInsightsEngine.detect_plateau(calcs, 'deadlift', plateau_days=30)
+        self.assertIsNotNone(plateau)
+        self.assertTrue(plateau['is_plateau'])
+        self.assertLess(plateau['improvement_pct'], 2.0)
+
+    def test_ml_insights_strength_balance(self):
+        """Test strength balance analysis"""
+        user = self.create_user()
+        # Create calculations for multiple exercises
+        exercises_data = [
+            ('bench_press', 200),
+            ('squat', 300),
+            ('deadlift', 350),
+            ('overhead_press', 150)
+        ]
+
+        calcs = []
+        for exercise, rm in exercises_data:
+            calc = OneRMCalculation(
+                user_id=user.id,
+                exercise=exercise,
+                weight=rm * 0.8,
+                reps=5,
+                calculated_1rm=rm,
+                formula_used='average',
+                weight_unit='lbs'
+            )
+            calcs.append(calc)
+            db.session.add(calc)
+        db.session.commit()
+
+        balance = MLInsightsEngine.analyze_strength_balance(calcs)
+        self.assertIsNotNone(balance)
+        self.assertIn('exercises', balance)
+        self.assertIn('balance', balance)
+        self.assertEqual(len(balance['exercises']), 4)
+
+    def test_ml_insights_volume_trends(self):
+        """Test volume trends analysis"""
+        user = self.create_user()
+        # Create workout logs
+        workouts = []
+        for i in range(10):
+            workout = Workout(
+                user_id=user.id,
+                exercise='bench_press',
+                weight=200,
+                reps=5,
+                effort=2,
+                created_at=datetime.now(UTC) - timedelta(days=i)
+            )
+            workouts.append(workout)
+            db.session.add(workout)
+        db.session.commit()
+
+        volume = MLInsightsEngine.analyze_volume_trends(workouts, days=30)
+        self.assertIsNotNone(volume)
+        self.assertEqual(volume['total_workouts'], 10)
+        self.assertGreater(volume['total_volume'], 0)
+        self.assertIn('effort_distribution', volume)
+
+    def test_ml_insights_personal_records(self):
+        """Test personal records retrieval"""
+        user = self.create_user()
+        # Create calculations with one PR per exercise
+        calcs = []
+        calc1 = OneRMCalculation(
+            user_id=user.id,
+            exercise='bench_press',
+            weight=200,
+            reps=5,
+            calculated_1rm=250,
+            formula_used='average',
+            weight_unit='lbs'
+        )
+        calc2 = OneRMCalculation(
+            user_id=user.id,
+            exercise='bench_press',
+            weight=225,
+            reps=5,
+            calculated_1rm=275,  # PR
+            formula_used='average',
+            weight_unit='lbs',
+            created_at=datetime.now(UTC) - timedelta(days=7)
+        )
+        calcs.extend([calc1, calc2])
+        db.session.add_all(calcs)
+        db.session.commit()
+
+        prs = MLInsightsEngine.get_personal_records(calcs)
+        self.assertIsNotNone(prs)
+        self.assertIn('bench_press', prs)
+        self.assertEqual(prs['bench_press']['1rm'], 275)
+
+    def test_ml_insights_route_with_data(self):
+        """Test ML insights route with sufficient data"""
+        user = self.create_user()
+        # Create minimum required calculations
+        for i in range(3):
+            calc = OneRMCalculation(
+                user_id=user.id,
+                exercise='bench_press',
+                weight=200 + i * 10,
+                reps=5,
+                calculated_1rm=220 + i * 10,
+                formula_used='average',
+                weight_unit='lbs',
+                created_at=datetime.now(UTC) - timedelta(days=30 * (2 - i))
+            )
+            db.session.add(calc)
+        db.session.commit()
+
+        with self.client:
+            self.login(username=user.username)
+            response = self.client.get('/ml-insights')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'ML Insights Dashboard', response.data)
+        self.assertIn(b'Progress Score', response.data)
 
 
 if __name__ == '__main__':

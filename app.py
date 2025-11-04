@@ -515,8 +515,304 @@ class RecommendationEngine:
         
         next_goal = round(one_rm * 1.05, 1)
         recommendations.append(f"\n🎯 Next Goal: {next_goal} {unit_label} (+5%)")
-        
+
         return recommendations
+
+class MLInsightsEngine:
+    """
+    Machine Learning Insights Engine for analyzing training progress and predicting future performance.
+    Uses statistical methods and trend analysis on user's workout history.
+    """
+
+    @staticmethod
+    def calculate_progress_velocity(calculations, exercise=None, days=90):
+        """
+        Calculate the rate of 1RM improvement per week.
+        Returns velocity in lbs/week and percentage improvement.
+        """
+        if exercise:
+            calculations = [c for c in calculations if c.exercise == exercise]
+
+        if len(calculations) < 2:
+            return None
+
+        # Sort by date
+        calculations = sorted(calculations, key=lambda x: x.created_at)
+
+        # Get first and last calculations
+        first = calculations[0]
+        last = calculations[-1]
+
+        # Calculate time difference in weeks
+        time_diff = (last.created_at - first.created_at).total_seconds() / (7 * 24 * 3600)
+        if time_diff == 0:
+            return None
+
+        # Calculate improvement
+        improvement = last.calculated_1rm - first.calculated_1rm
+        velocity_per_week = improvement / time_diff if time_diff > 0 else 0
+        percent_improvement = (improvement / first.calculated_1rm * 100) if first.calculated_1rm > 0 else 0
+
+        return {
+            'velocity_per_week': round(velocity_per_week, 2),
+            'total_improvement': round(improvement, 2),
+            'percent_improvement': round(percent_improvement, 1),
+            'time_span_weeks': round(time_diff, 1),
+            'first_1rm': round(first.calculated_1rm, 2),
+            'latest_1rm': round(last.calculated_1rm, 2),
+            'unit': last.weight_unit
+        }
+
+    @staticmethod
+    def predict_future_1rm(calculations, exercise, days_ahead=30):
+        """
+        Predict future 1RM using linear regression with diminishing returns.
+        """
+        exercise_calcs = [c for c in calculations if c.exercise == exercise]
+
+        if len(exercise_calcs) < 3:
+            return None
+
+        # Sort by date
+        exercise_calcs = sorted(exercise_calcs, key=lambda x: x.created_at)
+
+        # Use last 90 days for prediction
+        cutoff_date = current_utc_time() - timedelta(days=90)
+        recent_calcs = [c for c in exercise_calcs if c.created_at >= cutoff_date]
+
+        if len(recent_calcs) < 2:
+            recent_calcs = exercise_calcs[-5:]  # Use last 5 if not enough recent data
+
+        # Simple linear regression
+        first_date = recent_calcs[0].created_at
+        x_values = [(c.created_at - first_date).total_seconds() / (24 * 3600) for c in recent_calcs]
+        y_values = [c.calculated_1rm for c in recent_calcs]
+
+        n = len(x_values)
+        sum_x = sum(x_values)
+        sum_y = sum(y_values)
+        sum_xy = sum(x * y for x, y in zip(x_values, y_values))
+        sum_x2 = sum(x * x for x in x_values)
+
+        # Calculate slope and intercept
+        denominator = n * sum_x2 - sum_x * sum_x
+        if denominator == 0:
+            return None
+
+        slope = (n * sum_xy - sum_x * sum_y) / denominator
+        intercept = (sum_y - slope * sum_x) / n
+
+        # Apply diminishing returns factor (progress slows over time)
+        # Use 0.7 factor to be conservative
+        adjusted_slope = slope * 0.7
+
+        # Predict future value
+        current_1rm = recent_calcs[-1].calculated_1rm
+        days_from_start = (current_utc_time() - first_date).total_seconds() / (24 * 3600)
+        predicted_x = days_from_start + days_ahead
+        predicted_1rm = intercept + adjusted_slope * predicted_x
+
+        # Don't predict negative progress
+        if predicted_1rm < current_1rm:
+            predicted_1rm = current_1rm
+
+        return {
+            'predicted_1rm': round(predicted_1rm, 2),
+            'current_1rm': round(current_1rm, 2),
+            'predicted_gain': round(predicted_1rm - current_1rm, 2),
+            'days_ahead': days_ahead,
+            'confidence': 'moderate' if len(recent_calcs) >= 5 else 'low',
+            'unit': recent_calcs[-1].weight_unit
+        }
+
+    @staticmethod
+    def detect_plateau(calculations, exercise, plateau_days=30):
+        """
+        Detect if progress has stalled (plateau).
+        Returns True if no improvement in the specified period.
+        """
+        exercise_calcs = [c for c in calculations if c.exercise == exercise]
+
+        if len(exercise_calcs) < 2:
+            return None
+
+        # Sort by date
+        exercise_calcs = sorted(exercise_calcs, key=lambda x: x.created_at)
+
+        # Get calculations in the plateau window
+        cutoff_date = current_utc_time() - timedelta(days=plateau_days)
+        recent_calcs = [c for c in exercise_calcs if c.created_at >= cutoff_date]
+
+        if len(recent_calcs) < 2:
+            return None
+
+        # Check if there's been any improvement
+        max_recent = max(c.calculated_1rm for c in recent_calcs)
+        min_recent = min(c.calculated_1rm for c in recent_calcs)
+
+        # Get historical best (before plateau window)
+        historical_calcs = [c for c in exercise_calcs if c.created_at < cutoff_date]
+        historical_max = max((c.calculated_1rm for c in historical_calcs), default=0)
+
+        improvement_pct = ((max_recent - min_recent) / min_recent * 100) if min_recent > 0 else 0
+
+        # Plateau if less than 2% improvement in the period
+        is_plateau = improvement_pct < 2.0
+
+        # Check if stuck below historical best
+        below_best = max_recent < historical_max * 0.98 if historical_max > 0 else False
+
+        return {
+            'is_plateau': is_plateau,
+            'improvement_pct': round(improvement_pct, 1),
+            'days_analyzed': plateau_days,
+            'current_1rm': round(max_recent, 2),
+            'historical_best': round(historical_max, 2) if historical_max > 0 else None,
+            'below_historical_best': below_best,
+            'recommendation': 'Consider deload or program change' if is_plateau else 'Keep up the good work!'
+        }
+
+    @staticmethod
+    def analyze_strength_balance(calculations):
+        """
+        Analyze balance between major lifts (bench, squat, deadlift, overhead press).
+        """
+        exercises = ['bench_press', 'squat', 'deadlift', 'overhead_press']
+        latest_1rms = {}
+
+        for exercise in exercises:
+            exercise_calcs = [c for c in calculations if c.exercise == exercise]
+            if exercise_calcs:
+                latest = max(exercise_calcs, key=lambda x: x.created_at)
+                latest_1rms[exercise] = latest.calculated_1rm
+
+        if len(latest_1rms) < 2:
+            return None
+
+        # Typical strength ratios (relative to squat)
+        ideal_ratios = {
+            'squat': 1.0,
+            'deadlift': 1.15,  # ~15% stronger than squat
+            'bench_press': 0.7,  # ~70% of squat
+            'overhead_press': 0.5  # ~50% of squat
+        }
+
+        balance_analysis = {}
+
+        # Use squat as baseline if available, otherwise use deadlift
+        baseline_exercise = 'squat' if 'squat' in latest_1rms else ('deadlift' if 'deadlift' in latest_1rms else None)
+
+        if baseline_exercise:
+            baseline_value = latest_1rms[baseline_exercise]
+            baseline_ratio = ideal_ratios[baseline_exercise]
+
+            for exercise, value in latest_1rms.items():
+                expected = (baseline_value / baseline_ratio) * ideal_ratios[exercise]
+                difference = value - expected
+                difference_pct = (difference / expected * 100) if expected > 0 else 0
+
+                status = 'balanced'
+                if difference_pct > 10:
+                    status = 'strong'
+                elif difference_pct < -10:
+                    status = 'weak'
+
+                balance_analysis[exercise] = {
+                    'current': round(value, 2),
+                    'expected': round(expected, 2),
+                    'difference': round(difference, 2),
+                    'difference_pct': round(difference_pct, 1),
+                    'status': status
+                }
+
+        return {
+            'exercises': latest_1rms,
+            'balance': balance_analysis,
+            'baseline': baseline_exercise
+        }
+
+    @staticmethod
+    def analyze_volume_trends(workouts, days=30):
+        """
+        Analyze training volume trends over time.
+        """
+        if not workouts:
+            return None
+
+        cutoff_date = current_utc_time() - timedelta(days=days)
+        recent_workouts = [w for w in workouts if w.created_at >= cutoff_date]
+
+        if not recent_workouts:
+            return None
+
+        # Calculate total volume (weight × reps)
+        total_volume = sum(w.weight * w.reps for w in recent_workouts)
+        avg_volume_per_workout = total_volume / len(recent_workouts)
+
+        # Group by exercise
+        exercise_frequency = {}
+        exercise_volume = {}
+
+        for workout in recent_workouts:
+            exercise = workout.exercise
+            volume = workout.weight * workout.reps
+
+            exercise_frequency[exercise] = exercise_frequency.get(exercise, 0) + 1
+            exercise_volume[exercise] = exercise_volume.get(exercise, 0) + volume
+
+        # Calculate effort distribution
+        effort_counts = {1: 0, 2: 0, 3: 0}
+        for workout in recent_workouts:
+            if workout.effort:
+                effort_counts[workout.effort] = effort_counts.get(workout.effort, 0) + 1
+
+        total_efforts = sum(effort_counts.values())
+        effort_distribution = {
+            'easy': round(effort_counts[1] / total_efforts * 100, 1) if total_efforts > 0 else 0,
+            'medium': round(effort_counts[2] / total_efforts * 100, 1) if total_efforts > 0 else 0,
+            'hard': round(effort_counts[3] / total_efforts * 100, 1) if total_efforts > 0 else 0
+        }
+
+        return {
+            'total_workouts': len(recent_workouts),
+            'total_volume': round(total_volume, 2),
+            'avg_volume_per_workout': round(avg_volume_per_workout, 2),
+            'exercise_frequency': exercise_frequency,
+            'exercise_volume': {k: round(v, 2) for k, v in exercise_volume.items()},
+            'effort_distribution': effort_distribution,
+            'days_analyzed': days
+        }
+
+    @staticmethod
+    def get_personal_records(calculations):
+        """
+        Get personal records for each exercise.
+        """
+        if not calculations:
+            return None
+
+        exercises = set(c.exercise for c in calculations)
+        prs = {}
+
+        for exercise in exercises:
+            exercise_calcs = [c for c in calculations if c.exercise == exercise]
+            if exercise_calcs:
+                pr_calc = max(exercise_calcs, key=lambda x: x.calculated_1rm)
+
+                # Find time since last PR
+                recent_calcs = sorted(exercise_calcs, key=lambda x: x.created_at, reverse=True)
+                days_since_pr = (current_utc_time() - pr_calc.created_at).days
+
+                prs[exercise] = {
+                    '1rm': round(pr_calc.calculated_1rm, 2),
+                    'weight': round(pr_calc.weight, 2),
+                    'reps': pr_calc.reps,
+                    'date': pr_calc.created_at,
+                    'days_ago': days_since_pr,
+                    'unit': pr_calc.weight_unit
+                }
+
+        return prs
 
 @app.route('/')
 def index():
@@ -932,10 +1228,103 @@ def my_workouts():
 @app.route('/ml-insights')
 @login_required
 def ml_insights():
-    # Calculate features from workout history
-    # Call your ML API
-    # Show predictions with disclaimers
-    pass
+    """
+    ML-powered insights dashboard showing progress analysis, predictions, and recommendations.
+    """
+    # Get user's calculation and workout history
+    calculations = OneRMCalculation.query.filter_by(user_id=current_user.id)\
+        .order_by(OneRMCalculation.created_at.desc()).all()
+
+    workouts = Workout.query.filter_by(user_id=current_user.id)\
+        .order_by(Workout.created_at.desc()).all()
+
+    # Check if user has enough data
+    if len(calculations) < 2:
+        flash('You need at least 2 calculations to see ML insights. Keep training!', 'info')
+        return redirect(url_for('calculate'))
+
+    # Get list of exercises user has trained
+    exercises = list(set(c.exercise for c in calculations))
+
+    # Calculate insights for each exercise
+    insights_by_exercise = {}
+
+    for exercise in exercises:
+        exercise_insights = {}
+
+        # Progress velocity (how fast are they improving)
+        velocity = MLInsightsEngine.calculate_progress_velocity(calculations, exercise)
+        if velocity:
+            exercise_insights['velocity'] = velocity
+
+        # Future predictions (30, 60, 90 days)
+        predictions = {}
+        for days in [30, 60, 90]:
+            pred = MLInsightsEngine.predict_future_1rm(calculations, exercise, days)
+            if pred:
+                predictions[days] = pred
+        if predictions:
+            exercise_insights['predictions'] = predictions
+
+        # Plateau detection
+        plateau = MLInsightsEngine.detect_plateau(calculations, exercise, plateau_days=30)
+        if plateau:
+            exercise_insights['plateau'] = plateau
+
+        if exercise_insights:
+            insights_by_exercise[exercise] = exercise_insights
+
+    # Overall strength balance analysis
+    balance = MLInsightsEngine.analyze_strength_balance(calculations)
+
+    # Volume trends (from workout logs)
+    volume_trends = MLInsightsEngine.analyze_volume_trends(workouts, days=30)
+
+    # Personal records
+    prs = MLInsightsEngine.get_personal_records(calculations)
+
+    # Calculate overall progress score (0-100)
+    progress_score = 0
+    score_factors = 0
+
+    for exercise, insights in insights_by_exercise.items():
+        if 'velocity' in insights and insights['velocity']['velocity_per_week'] > 0:
+            progress_score += min(insights['velocity']['velocity_per_week'] * 10, 25)  # Cap at 25 per exercise
+            score_factors += 1
+
+        if 'plateau' in insights and not insights['plateau']['is_plateau']:
+            progress_score += 15
+            score_factors += 1
+
+    if score_factors > 0:
+        progress_score = min(round(progress_score / score_factors * 2, 1), 100)
+    else:
+        progress_score = 50  # Neutral score if not enough data
+
+    # Determine progress level
+    if progress_score >= 80:
+        progress_level = 'Excellent'
+        progress_class = 'success'
+    elif progress_score >= 60:
+        progress_level = 'Good'
+        progress_class = 'info'
+    elif progress_score >= 40:
+        progress_level = 'Moderate'
+        progress_class = 'warning'
+    else:
+        progress_level = 'Needs Improvement'
+        progress_class = 'danger'
+
+    return render_template('ml_insights.html',
+                         insights_by_exercise=insights_by_exercise,
+                         balance=balance,
+                         volume_trends=volume_trends,
+                         prs=prs,
+                         progress_score=progress_score,
+                         progress_level=progress_level,
+                         progress_class=progress_class,
+                         total_calculations=len(calculations),
+                         total_workouts=len(workouts))
 
 @app.cli.command('migrate-db')
 def migrate_db_command():
